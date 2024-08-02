@@ -1,0 +1,20 @@
+tmp/*
+
+.env
+.env.backup
+.env.serv
+.env.testing
+/.idea
+/.vscode
+/tmp/main
+/files/*
+
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+# Test binary, built with `go test -c`
+*.test
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out

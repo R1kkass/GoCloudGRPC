@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+option go_package = "./access";
+
+package access;
+
+service AccessGreeter {
+    rpc CreateAccess(RequestAccess) returns (ResponseAccess) {}
+    rpc GetAccesses(Empty) returns (GetAccessesResponse) {}
+    rpc ChangeAccess(ChangeAccessRequest) returns (ChangeAccessResponse) {}
+}
+
+message RequestAccess {
+    int32 folder_id = 1;
+    int32 file_id = 2;
+    int32 user_id = 3;
+}
+
+message ResponseAccess {
+    string message = 1;
+}
+
+message GetAccessesResponse{
+    repeated RequestAccessData accesses = 1;
+}
+
+message RequestAccessData {
+    int32 id = 1;
+    int32 user_id = 2;
+    int32 current_user_id = 3;
+    int32 file_id = 4;
+    int32 folder_id = 5;
+    int32 status_id = 6;
+    User user = 7;
+    User curent_user = 8;
+}
+
+message User {
+    int32 id = 1;
+    string name = 2;
+    string email = 3;
+}
+
+message Empty {
+
+}
+
+message ChangeAccessRequest {
+    int32 id = 1;
+    int32 status = 2;
+}
+
+message ChangeAccessResponse {
+    string message = 1; 
+}

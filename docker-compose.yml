@@ -1,0 +1,67 @@
+version: "3.8"
+
+networks:
+  golang-net:
+    name: golang
+    driver: bridge
+
+services:
+  golang-api:
+    build:
+      dockerfile: Dockerfile
+      context: ./golang-api
+      target: dev
+    restart: always
+    hostname: golang
+    ports:
+      - "8887:8888"
+    volumes:
+      - ./golang-api:/var/www/html
+    networks:
+      - golang-net
+  
+  golang-grpc:
+    build:
+      dockerfile: Dockerfile
+      context: ./golang-grpc
+      target: dev
+    restart: always
+    hostname: golang-grpc
+    ports:
+      - "50051:50051"
+    volumes:
+      - ./golang-grpc:/var/www/html
+    networks:
+      - golang-net
+  
+  postgres:
+    image: postgres:13.3
+    restart: always
+    environment:
+      POSTGRES_DB: "homestead"
+      POSTGRES_USER: "root"
+      POSTGRES_PASSWORD: "secret"
+    ports:
+      - "5432:5432"
+    networks:
+      - golang-net
+
+  pgadmin:
+    container_name: pgadmin_container
+    image: dpage/pgadmin4:7.2
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "easyteka@habr.com"
+      PGADMIN_DEFAULT_PASSWORD: "secret"
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    # volumes:
+    #   - pgadmin-data:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+    networks:
+      - golang-net
