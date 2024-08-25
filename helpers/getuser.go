@@ -3,11 +3,12 @@ package helpers
 import (
 	"mypackages/db"
 	Model "mypackages/models"
-
+	"strings"
 )
 
-func GetUser(token string) (*Model.User, bool) {
-	email:=ParseJWT(token)
+func GetUser(jwtToken []string) (*Model.User, bool) {
+	jwtToken = strings.Split(jwtToken[0], " ")
+	email:=ParseJWT(jwtToken[1])
 
 	var user Model.User;
 
