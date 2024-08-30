@@ -5,8 +5,11 @@ option go_package = "./chat";
 package chat;
 
 service ChatGreeter {
-    rpc CreateChat(CreateRequestChat) returns (CreateResponseChat) {};
-    rpc GetChat(Empty) returns (GetResponseChat) {};
+    rpc CreateChat(CreateRequestChat) returns (CreateResponseChat);
+    rpc GetChat(Empty) returns (GetResponseChat);
+    rpc CreateSecondaryKey(CreateSecondaryKeyRequest) returns (CreateSecondaryKeyResponse);
+    rpc GetSecondaryKey(GetSecondaryKeyRequest) returns (GetSecondaryKeyResponse);
+    rpc GetPublicKey(GetPublicKeyRequest) returns (GetPublicKeyResponse);
 }
 
 message CreateRequestChat {
@@ -15,6 +18,13 @@ message CreateRequestChat {
 
 message CreateResponseChat {
     string message = 1;
+    Keys keys = 2;
+    uint32 chat_id = 3;
+}
+
+message Keys {
+    string p = 1;
+    int64 g = 2;
 }
 
 message Empty {}
@@ -54,4 +64,31 @@ message User {
     uint32 id = 1;
     string name = 2;
     string email = 3;
+}
+
+message CreateSecondaryKeyRequest {
+    uint32 chat_id = 1;
+    string key = 2;
+}
+
+message CreateSecondaryKeyResponse {
+    string message = 1; 
+}
+
+message GetSecondaryKeyRequest {
+    uint32 chat_id = 1;
+}
+
+message GetSecondaryKeyResponse {
+    string key = 1;
+    string p = 2;
+}
+
+message GetPublicKeyRequest {
+    uint32 chat_id = 1;
+}
+
+message GetPublicKeyResponse {
+    int64 g = 1;
+    string p = 2;
 }

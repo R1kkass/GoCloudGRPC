@@ -24,9 +24,9 @@ func (s *accessServer) CreateAccess(ctx context.Context, in *access.RequestAcces
 	var folder Model.Folder
 	jwtToken, _ := md["authorization"]
 
-	user, ok := helpers.GetUser(jwtToken)
+	user, err := helpers.GetUser(jwtToken)
 
-	if !ok {
+	if err != nil {
 		return nil, status.Error(codes.NotFound, "Пользователь не найден")
 	}
 
@@ -64,9 +64,9 @@ func (s *accessServer) GetAccesses(ctx context.Context, in *access.Empty) (*acce
 
 	var request_access []*access.RequestAccessData
 	jwtToken, _ := md["authorization"]
-	user, ok := helpers.GetUser(jwtToken)
+	user, err := helpers.GetUser(jwtToken)
 
-	if !ok {
+	if err != nil {
 		return nil, status.Error(codes.NotFound, "Пользователь не найден")
 	}
 
@@ -81,9 +81,9 @@ func (s *accessServer) ChangeAccess(ctx context.Context, in *access.ChangeAccess
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	jwtToken, _ := md["authorization"]
-	user, ok := helpers.GetUser(jwtToken)
+	user, err := helpers.GetUser(jwtToken)
 
-	if !ok {
+	if err != nil {
 		return nil, status.Error(codes.NotFound, "Пользователь не найден")
 	}
 

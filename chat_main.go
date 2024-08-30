@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	chat_actions "mypackages/actions/chat"
 	"mypackages/db"
 	"mypackages/helpers"
 	Model "mypackages/models"
@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"gorm.io/gorm"
 )
 
 type chatServer struct {
@@ -21,83 +22,75 @@ type chatServer struct {
 }
 
 func (s *chatServer) CreateChat(ctx context.Context, in *chat.CreateRequestChat) (*chat.CreateResponseChat, error) {
-	md, _ := metadata.FromIncomingContext(ctx)
-
-	if err := FindUser(ctx, in); err != nil {
-		return &chat.CreateResponseChat{
-			Message: "Ошибка",
-		}, status.Error(codes.NotFound, "Пользователь не найден")
-	}
 
 	var chats Model.Chat
 
-	jwtToken, _ := md["authorization"]
+	user, err := helpers.GetUserFormMd(ctx)
 
-	user, _ := helpers.GetUser(jwtToken)
+	if err != nil {
+		return nil, status.Error(codes.PermissionDenied, "Пользователь не найден")
+	}
 
-	if err := CheckChat(ctx, in); err != nil {
+	if err := chat_actions.CheckChatExist(ctx, in); err != nil {
 		return &chat.CreateResponseChat{
 			Message: "Ошибка",
 		}, status.Error(codes.AlreadyExists, "Чат уже существует")
 	}
 
-	db.DB.Create(
-		&chats,
-	)
-	var chatUsers Model.ChatUser
+	var p string
+	var g int64
 
-	db.DB.Model(&chatUsers).Create(
-		&Model.ChatUser{
+	err = db.DB.Transaction(func(tx *gorm.DB) error {
+		result := db.DB.Create(
+			&chats,
+		)
+		var chatUsers Model.ChatUser
+		
+		if result.Error != nil {
+			return errors.New("чат не создан")
+		}
+
+		result = db.DB.Model(&chatUsers).Create(
+			&Model.ChatUser{
+				ChatID: int(chats.ID),
+				UserRelation: Model.UserRelation{
+					UserID: int(user.ID),
+				},
+			},
+		).Create(&Model.ChatUser{
 			ChatID: int(chats.ID),
 			UserRelation: Model.UserRelation{
-				UserID: int(user.ID),
+				UserID: int(in.GetOtherId()),
 			},
-		},
-	).Create(&Model.ChatUser{
-		ChatID: int(chats.ID),
-		UserRelation: Model.UserRelation{
-			UserID: int(in.GetOtherId()),
-		},
+		})
+
+		if result.Error != nil {
+			return errors.New("чат не создан")
+		}
+
+		p, g = chat_actions.SendFirstParams(&chats);
+		return nil
 	})
+	
+	if err != nil {
+		return nil, status.Error(codes.Unknown, err.Error())
+	}
 
 	return &chat.CreateResponseChat{
 		Message: fmt.Sprintf("%v", user),
+		Keys: &chat.Keys{
+			P: p,
+			G: g,
+		},
+		ChatId: uint32(chats.ID),
 	}, nil
 }
 
-func CheckChat(ctx context.Context, in *chat.CreateRequestChat) error {
-	md, _ := metadata.FromIncomingContext(ctx)
-	jwtToken, _ := md["authorization"]
 
-	user, _ := helpers.GetUser(jwtToken)
-
-	var usersChat Model.ChatUser
-
-	result := db.DB.Raw(`SELECT count(*), chat_id from chat_users WHERE chat_id in (SELECT chat_id FROM chat_users Where user_id = ? INTERSECT SELECT chat_id FROM chat_users Where user_id = ?) GROUP BY chat_id`, user.ID, in.GetOtherId()).Scan(&usersChat)
-
-	log.Println(result)
-	if result.RowsAffected != 0 {
-		return errors.New("чат уже существует")
-	}
-
-	return nil
-}
-
-func FindUser(ctx context.Context, in *chat.CreateRequestChat) error {
-	var users Model.User
-	result := db.DB.Model(&users).Where("id = ?", in.GetOtherId()).Find(&users)
-
-	if result.RowsAffected == 0 {
-		return errors.New("пользователь не найден")
-	}
-
-	return nil
-}
 
 func (s *chatServer) GetChat(ctx context.Context, in *chat.Empty) (*chat.GetResponseChat, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	jwtToken, _ := md["authorization"]
-
 	user, _ := helpers.GetUser(jwtToken)
 
 	var chats []*chat.ChatUsers
@@ -108,4 +101,79 @@ func (s *chatServer) GetChat(ctx context.Context, in *chat.Empty) (*chat.GetResp
 	md.Set("text", string(out))
 	
 	return &chat.GetResponseChat{Chats: chats}, nil
+}
+
+
+func (s *chatServer) CreateSecondaryKey(ctx context.Context, in *chat.CreateSecondaryKeyRequest) (*chat.CreateSecondaryKeyResponse, error){
+	user, err := helpers.GetUserFormMd(ctx)
+
+	if err != nil {
+		return nil, status.Error(codes.PermissionDenied, "Пользователь не найден")
+	}
+	fmt.Println(user.ID)
+	_, err = chat_actions.CheckSecondaryKey(user.ID, in.GetChatId())
+
+	if err != nil {
+		return nil, status.Error(codes.AlreadyExists, "Ключ уже создан")
+	}
+
+	db.DB.Create(&Model.KeysSecondary{
+		UserID: user.ID,
+		ChatID: uint(in.GetChatId()),
+		Key: in.GetKey(),
+	})
+	
+	return &chat.CreateSecondaryKeyResponse{
+		Message: "Успешно",
+	}, nil
+}
+
+func (s *chatServer) GetSecondaryKey(ctx context.Context, in *chat.GetSecondaryKeyRequest) (*chat.GetSecondaryKeyResponse, error) {
+	
+	user, err := helpers.GetUserFormMd(ctx)
+	fmt.Println(user.ID)
+	if err != nil {
+		return nil, status.Error(codes.PermissionDenied, "Пользователь не найден")
+	}
+
+	err, _ = chat_actions.CheckChat(in.GetChatId(), user.ID)
+
+	if err != nil {
+		return nil, status.Error(codes.NotFound, "Чат не найден")
+	}
+
+	key, err := chat_actions.GetSecondaryKey(user.ID, in.GetChatId())
+	
+	if err != nil {
+		return nil, status.Error(codes.NotFound, err.Error())
+	}
+	
+	keys, err := chat_actions.GetPublicKey(in.GetChatId())
+
+	if err != nil {
+		return nil, status.Error(codes.NotFound, err.Error())
+	}
+	
+	return &chat.GetSecondaryKeyResponse{
+		Key: key.Key,
+		P: keys.P,
+	}, nil
+}
+
+func (s *chatServer) GetPublicKey(ctx context.Context, in *chat.GetPublicKeyRequest) (*chat.GetPublicKeyResponse, error) {
+
+	if err := helpers.CheckChat(ctx, in.GetChatId()); err != nil {
+		return nil, status.Error(codes.NotFound, "Чат не найден")
+	}
+
+	keys, err := chat_actions.GetPublicKey(in.GetChatId())
+	
+	if err != nil {
+		return nil, status.Error(codes.NotFound, err.Error())
+	}
+
+	return &chat.GetPublicKeyResponse{
+		G: keys.G,
+		P: keys.P,
+	}, nil
 }

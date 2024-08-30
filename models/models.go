@@ -124,3 +124,19 @@ type Message struct {
 	Text     string `json:"text"`
 	NameChat string `json:"name_chat"`
 }
+
+type Keys struct {
+	DefaultModel
+
+	ChatID uint `json:"user_id"`
+	P string `json:"p"`
+	G int64 `json:"g"`
+}
+
+type KeysSecondary struct {
+	DefaultModel
+
+	UserID uint `json:"user_id"`
+	ChatID uint `json:"chat_id"`
+	Key string `json:"key"`
+}

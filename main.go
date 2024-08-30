@@ -54,24 +54,6 @@ func main() {
 	access.RegisterAccessGreeterServer(s, &accessServer{})
 	chat.RegisterChatGreeterServer(s, &chatServer{})
 
-	log.Printf("server listening at %v", lis.Addr())
-
-	var chats []*chat.ChatUsers
-	// var chats *Model.ChatUser
-
-	// db.DB.Model(&Model.ChatUser{}).Preload("User").Preload("Chat.Message").Where("user_id = ?", user.ID).Find(&chats)
-	// db.DB.Model(&Model.ChatUser{}).Preload("User").Preload("Chat").Preload("Chat.Message").Where("user_id = ? AND chat_id=1", 2).Find(&chats)
-	db.DB.Model(&Model.ChatUser{}).Preload("User").Preload("Chat").Preload("Chat.Message").Preload("Chat.ChatUsers.User").Where("user_id = ?", 2).Find(&chats)
-
-	// log.Printf("Some debug: %v", &chat.ChatUsers{
-	// 	Chat: &chat.Chat{
-	// 		Id:      uint32(chats.ID),
-	// 		Message: &chat.Message{Id: uint32(chats.Chat.Message.ID), Text: chats.Chat.Message.Text},
-	// 	},
-	// })
-
-	log.Printf("Some debug: %v", chats[0].Chat.ChatUsers[1].User)
-
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
@@ -84,7 +66,6 @@ type usersServer struct {
 
 func (s *usersServer) GetUsers(ctx context.Context, in *users.GetUsersRequest) (*users.GetUsersResponse, error) {
 	var usersList []Model.User
-	log.Printf("Received: %v", in.GetUserName())
 	db.DB.Model(&Model.User{}).Where("name LIKE ?", "%"+in.GetUserName()+"%").Or("email LIKE ?", "%"+in.GetUserName()+"%").Find(&usersList)
 	var usersResponse []*users.Users
 

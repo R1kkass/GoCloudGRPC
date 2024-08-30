@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -13,6 +14,6 @@ func ParseJWT(token string) string {
 	jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
 		return []byte(secretKey), nil
 	})
-
+	fmt.Println(token)
 	return claims["email"].(string)
 }
