@@ -10,7 +10,7 @@ func GeneratePubKeys() (*big.Int, int64){
 	max := new(big.Int)
 	min := new(big.Int)
 
-	var pp int64 = 10
+	var pp int64 = 20
 
 	max = max.Exp(big.NewInt(2), big.NewInt(pp), nil).Sub(max, big.NewInt(1))
 	min = min.Exp(big.NewInt(2), big.NewInt(pp-1), nil).Sub(min, big.NewInt(1))

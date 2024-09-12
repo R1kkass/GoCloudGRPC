@@ -85,15 +85,15 @@ func GetPublicKey(chatId uint32) (*Model.Keys, error){
 }
 
 func CheckChatExist(ctx context.Context, in *chat.CreateRequestChat) error {
-	// user, _ := helpers.GetUserFormMd(ctx)
+	user, _ := helpers.GetUserFormMd(ctx)
 
-	// var usersChat Model.ChatUser
+	var usersChat Model.ChatUser
 
-	// result := db.DB.Raw(`SELECT count(*), chat_id from chat_users WHERE chat_id in (SELECT chat_id FROM chat_users Where user_id = ? INTERSECT SELECT chat_id FROM chat_users Where user_id = ?) GROUP BY chat_id`, user.ID, in.GetOtherId()).Scan(&usersChat)
+	result := db.DB.Raw(`SELECT count(*), chat_id from chat_users WHERE chat_id in (SELECT chat_id FROM chat_users Where user_id = ? INTERSECT SELECT chat_id FROM chat_users Where user_id = ?) GROUP BY chat_id`, user.ID, in.GetOtherId()).Scan(&usersChat)
 
-	// if result.RowsAffected != 0 {
-	// 	return errors.New("чат уже существует")
-	// }
+	if result.RowsAffected != 0 {
+		return errors.New("чат уже существует")
+	}
 
 	return nil
 }

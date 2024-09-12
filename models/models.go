@@ -122,7 +122,6 @@ type Message struct {
 	ChatID   int    `json:"chat_id"`
 	Chat     *Chat  `json:"chat" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
 	Text     string `json:"text"`
-	NameChat string `json:"name_chat"`
 }
 
 type Keys struct {
