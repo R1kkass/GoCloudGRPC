@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+option go_package = "./auth";
+
+package auth;
+
+service AuthGreet {
+    rpc Login(LoginRequest) returns (LoginResponse);
+    rpc Registration(RegistrationRequest) returns (RegistrationResponse);
+    rpc DHConnect(DHConnectRequest) returns (DHConnectResponse);
+    rpc DHSecondConnect(DHConnectRequest) returns (DHSecondConnectResponse);
+};
+
+message LoginRequest {
+    string email = 1;
+    string password = 2;
+}
+
+message LoginResponse {
+    string access_token = 1;
+}
+
+message RegistrationRequest {
+    string email = 1;
+    string password = 2;
+    string name = 3;
+}
+
+message RegistrationResponse {
+    string access_token = 1;
+}
+
+message DHConnectRequest {
+
+}
+
+message DHConnectResponse {
+    string p = 1;
+    int64 g = 2;
+    string b = 3;
+    string userIdKey = 4;
+}
+
+message DHSecondConnectRequest {
+    string a = 1;
+    string userIdKey = 2;
+}
+
+message DHSecondConnectResponse {
+    string message = 1;
+}

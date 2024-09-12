@@ -1,8 +1,8 @@
 package helpers
 
 import (
-	"crypto/rand"
 	"math/big"
+	"crypto/rand"
 )
 
 
@@ -49,6 +49,23 @@ func powmod(a, b, p *big.Int) *big.Int {
         }
     }
     return res
+}
+
+func GeneratePubKey(p *big.Int, g int) (*big.Int, error) {
+
+	pp := 18
+	max := new(big.Int).Exp(big.NewInt(2), big.NewInt(int64(pp)), nil)
+	min := new(big.Int).Exp(big.NewInt(2), big.NewInt(int64(pp-1)), nil)
+	max = max.Sub(max,big.NewInt(1))
+	min = min.Sub(min,big.NewInt(1))
+
+	a, _ := rand.Int(rand.Reader, max.Sub(max, min).Add(max, min))
+
+	G := new(big.Int).SetInt64(int64(g))
+	A := new(big.Int)
+	A = A.Exp(G, a, nil).Mod(A, p)
+
+	return A, nil
 }
 
 func generator(p *big.Int) *big.Int {
