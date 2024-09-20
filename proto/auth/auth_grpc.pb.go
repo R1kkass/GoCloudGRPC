@@ -25,7 +25,7 @@ type AuthGreetClient interface {
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
 	Registration(ctx context.Context, in *RegistrationRequest, opts ...grpc.CallOption) (*RegistrationResponse, error)
 	DHConnect(ctx context.Context, in *DHConnectRequest, opts ...grpc.CallOption) (*DHConnectResponse, error)
-	DHSecondConnect(ctx context.Context, in *DHConnectRequest, opts ...grpc.CallOption) (*DHSecondConnectResponse, error)
+	DHSecondConnect(ctx context.Context, in *DHSecondConnectRequest, opts ...grpc.CallOption) (*DHSecondConnectResponse, error)
 }
 
 type authGreetClient struct {
@@ -63,7 +63,7 @@ func (c *authGreetClient) DHConnect(ctx context.Context, in *DHConnectRequest, o
 	return out, nil
 }
 
-func (c *authGreetClient) DHSecondConnect(ctx context.Context, in *DHConnectRequest, opts ...grpc.CallOption) (*DHSecondConnectResponse, error) {
+func (c *authGreetClient) DHSecondConnect(ctx context.Context, in *DHSecondConnectRequest, opts ...grpc.CallOption) (*DHSecondConnectResponse, error) {
 	out := new(DHSecondConnectResponse)
 	err := c.cc.Invoke(ctx, "/auth.AuthGreet/DHSecondConnect", in, out, opts...)
 	if err != nil {
@@ -79,7 +79,7 @@ type AuthGreetServer interface {
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
 	Registration(context.Context, *RegistrationRequest) (*RegistrationResponse, error)
 	DHConnect(context.Context, *DHConnectRequest) (*DHConnectResponse, error)
-	DHSecondConnect(context.Context, *DHConnectRequest) (*DHSecondConnectResponse, error)
+	DHSecondConnect(context.Context, *DHSecondConnectRequest) (*DHSecondConnectResponse, error)
 	mustEmbedUnimplementedAuthGreetServer()
 }
 
@@ -96,7 +96,7 @@ func (UnimplementedAuthGreetServer) Registration(context.Context, *RegistrationR
 func (UnimplementedAuthGreetServer) DHConnect(context.Context, *DHConnectRequest) (*DHConnectResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DHConnect not implemented")
 }
-func (UnimplementedAuthGreetServer) DHSecondConnect(context.Context, *DHConnectRequest) (*DHSecondConnectResponse, error) {
+func (UnimplementedAuthGreetServer) DHSecondConnect(context.Context, *DHSecondConnectRequest) (*DHSecondConnectResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DHSecondConnect not implemented")
 }
 func (UnimplementedAuthGreetServer) mustEmbedUnimplementedAuthGreetServer() {}
@@ -167,7 +167,7 @@ func _AuthGreet_DHConnect_Handler(srv interface{}, ctx context.Context, dec func
 }
 
 func _AuthGreet_DHSecondConnect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DHConnectRequest)
+	in := new(DHSecondConnectRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -179,7 +179,7 @@ func _AuthGreet_DHSecondConnect_Handler(srv interface{}, ctx context.Context, de
 		FullMethod: "/auth.AuthGreet/DHSecondConnect",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthGreetServer).DHSecondConnect(ctx, req.(*DHConnectRequest))
+		return srv.(AuthGreetServer).DHSecondConnect(ctx, req.(*DHSecondConnectRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

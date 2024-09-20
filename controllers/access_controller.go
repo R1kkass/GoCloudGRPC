@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"mypackages/consts"
 	"mypackages/db"
 	"mypackages/helpers"
@@ -96,4 +97,36 @@ func ChangeAccess(ctx context.Context, in *access.ChangeAccessRequest) (*access.
 	return &access.ChangeAccessResponse{
 		Message: "success",
 	}, nil
+}
+
+type SomeAbstr interface {
+    move()
+}
+
+func (s *SomeStruct) move() {
+    fmt.Println("двигать")
+}
+
+func (s SomeType) move() {
+	fmt.Println("someType")
+}
+
+
+type SomeType string
+
+type SomeStruct struct{
+	SomeAbstr
+}
+
+
+func main() {
+    
+    var c SomeAbstr = &SomeStruct{}
+    var c2 SomeStruct
+    
+	c2.move()
+
+    c.move()
+    c = SomeType("")
+	c.move()
 }

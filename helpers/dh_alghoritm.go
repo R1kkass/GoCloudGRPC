@@ -1,8 +1,8 @@
 package helpers
 
 import (
-	"math/big"
 	"crypto/rand"
+	"math/big"
 )
 
 
@@ -51,7 +51,7 @@ func powmod(a, b, p *big.Int) *big.Int {
     return res
 }
 
-func GeneratePubKey(p *big.Int, g int) (*big.Int, error) {
+func GeneratePubKey(p *big.Int, g int) (*big.Int, *big.Int, error) {
 
 	pp := 18
 	max := new(big.Int).Exp(big.NewInt(2), big.NewInt(int64(pp)), nil)
@@ -63,9 +63,10 @@ func GeneratePubKey(p *big.Int, g int) (*big.Int, error) {
 
 	G := new(big.Int).SetInt64(int64(g))
 	A := new(big.Int)
-	A = A.Exp(G, a, nil).Mod(A, p)
+	A = A.Exp(G, a, nil)
+	A = A.Mod(A, p)
 
-	return A, nil
+	return A, a, nil
 }
 
 func generator(p *big.Int) *big.Int {
@@ -98,7 +99,6 @@ func generator(p *big.Int) *big.Int {
 	}
 	return big.NewInt(-1)
 }
-
 
 func conditions(p *big.Int, g *big.Int) bool {
 	var n = big.NewInt(0)

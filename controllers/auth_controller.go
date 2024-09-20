@@ -2,6 +2,9 @@ package controllers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"math/big"
 	auth_action "mypackages/actions/auth"
 	"mypackages/db"
@@ -10,16 +13,11 @@ import (
 	"mypackages/proto/auth"
 	"os"
 	"strconv"
-	"time"
 
-	"github.com/golang-jwt/jwt"
-	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
-
-var secretKey, _ = os.LookupEnv("SECRET_KEY")
-var jwtSecretKey = []byte(secretKey)
 
 type KeyUser struct {
 	p *big.Int
@@ -31,41 +29,68 @@ var keysUser  = make(map[string]KeyUser)
 var generatedKeys  = make(map[string]string)
 
 func Login(ctx context.Context, in *auth.LoginRequest) (*auth.LoginResponse, error) {
-	var user *Model.User;
 
-	r := db.DB.Unscoped().Model(&user).First(&user, "email = ?", in.GetEmail())
-	match := auth_action.CheckPasswordHash(in.GetPassword(), user.Password)
+
+	var user *Model.User;
+	per, _ := peer.FromContext(ctx)
+	ip := per.Addr.String()
+
+	defer delete(generatedKeys, ip);
+
+	secretKey := generatedKeys[ip]
+	password := helpers.Decrypt(in.GetPassword(), secretKey)
+	email := helpers.Decrypt(in.GetEmail(), secretKey)
+
+	r := db.DB.Unscoped().Model(&user).First(&user, "email = ?", email)
+	match := auth_action.CheckPasswordHash(password, user.Password)
 	
 	if r.RowsAffected == 0 || !match{
 		return nil, status.Error(codes.Unknown, "Не авторизован")
 	}
 
-    payload := jwt.MapClaims{
-		"email": user.Email,
-        "exp": time.Now().Add(time.Hour * 72).Unix(),
-    }
 
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, payload)
-	t, _ := token.SignedString(jwtSecretKey)
+	secretToken, err := helpers.GenerateJWTToken(user, secretKey)
+
+	if err != nil {
+		return nil, status.Error(codes.Aborted, "Токен не создан")
+	}
+
+	db.DB.Model(&Model.SavedKeys{}).Create(&Model.SavedKeys{
+		UserID: user.ID,
+		Name: "",
+		Ip: ip,
+		Token: *secretToken,
+	})
+
 	return &auth.LoginResponse{
-		AccessToken: t,
+		AccessToken: *secretToken,
 	}, nil
 }
 
 func Registration(ctx context.Context, in *auth.RegistrationRequest) (*auth.RegistrationResponse, error) {
 	var user *Model.User;
+	p, _ := peer.FromContext(ctx)
+	ip:=p.Addr.String()
+	
+	secretKey := generatedKeys[ip]
 
-	r := db.DB.Unscoped().Model(&user).First(&user, "email = ?", in.GetEmail())
+	defer delete(generatedKeys, ip);
+
+	password := helpers.Decrypt(in.GetPassword(), secretKey)
+	email := helpers.Decrypt(in.GetEmail(), secretKey)
+	name := helpers.Decrypt(in.GetName(), secretKey)
+
+	r := db.DB.Unscoped().Model(&user).First(&user, "email = ?", email)
 	if r.RowsAffected > 0 {
 		return nil, status.Error(codes.AlreadyExists, "Такой пользователь уже есть")
 	}
 
-	pass, _ := auth_action.HashPassword(in.GetPassword())
+	pass, _ := auth_action.HashPassword(password)
 
 	newUser := Model.User{
-		Email: in.GetEmail(),
+		Email: email,
 		Password: pass,	
-		Name: in.GetName(),	
+		Name: name,
 	}
 
 	r = db.DB.Create(&newUser)
@@ -75,36 +100,53 @@ func Registration(ctx context.Context, in *auth.RegistrationRequest) (*auth.Regi
 		return nil, status.Error(codes.Unauthenticated, "Не зарегистрирован")
 	}
 
-    payload := jwt.MapClaims{
-		"email": user.Email,
-        "exp": time.Now().Add(time.Hour * 72).Unix(),
-    }
+	secretToken, err := helpers.GenerateJWTToken(user, secretKey)
 
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, payload)
-	t, _ := token.SignedString(jwtSecretKey)
-	
+	if err != nil {
+		return nil, status.Error(codes.Aborted, "Токен не создан")
+	}
+
+	db.DB.Model(&Model.SavedKeys{}).Create(&Model.SavedKeys{
+		UserID: user.ID,
+		Name: "",
+		Ip: ip,
+		Token: *secretToken,
+	})
+
 	return &auth.RegistrationResponse{
-		AccessToken: t,
+		AccessToken: *secretToken,
 	}, nil
 }
 
 func DHConnect(ctx context.Context, in *auth.DHConnectRequest) (*auth.DHConnectResponse, error) {
+	per, _ := peer.FromContext(ctx)
+	ip := per.Addr.String()
+	
 	p,g := helpers.GeneratePubKeys()
-	id := uuid.New()
-	b, _ := helpers.GeneratePubKey(p, int(g))
-	keysUser[id.String()] = KeyUser{
+	B, b, _ := helpers.GeneratePubKey(p, int(g))
+	keysUser[ip] = KeyUser{
 		p: p,
 		g: g,
 		b: b,
 	}
-	return &auth.DHConnectResponse{P: p.String(), G: g, UserIdKey: id.String(), B: b.String()}, nil
+	
+	return &auth.DHConnectResponse{P: p.String(), G: g, B: B.String()}, nil
 }
 
 func DHSecondConnect(ctx context.Context, in *auth.DHSecondConnectRequest) (*auth.DHSecondConnectResponse, error) {
-	keys := keysUser[in.GetUserIdKey()]
-	b, _ := helpers.GeneratePubKey(keys.b, int(keys.g))
-	generatedKeys[in.GetUserIdKey()] = b.String()
+	p, _ := peer.FromContext(ctx)
+	ip:=p.Addr.String()
 
+	keys := keysUser[ip]
+	b, _ := helpers.GenerateSecretKey(keys.p, keys.b.String(), in.GetA())
+	
+	bytes := []byte(b.String())
+	hash := sha256.Sum256(bytes)
+	hashString := hex.EncodeToString(hash[:])
+
+	generatedKeys[ip] = string(hashString)[0:32]
+	fmt.Println(string(hashString)[0:32])
+	fmt.Println("string(hashString)[0:32]")
 	return &auth.DHSecondConnectResponse{
 		Message: "Ключ успешно создан",
 	}, nil

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	chat_actions "mypackages/actions/chat"
 	"mypackages/db"
 	"mypackages/helpers"
@@ -73,7 +72,7 @@ func CreateChat(ctx context.Context, in *chat.CreateRequestChat) (*chat.CreateRe
 	}
 
 	return &chat.CreateResponseChat{
-		Message: fmt.Sprintf("%v", user),
+		Message: "Чат создан",
 		Keys: &chat.Keys{
 			P: p,
 			G: g,
@@ -106,7 +105,6 @@ func CreateSecondaryKey(ctx context.Context, in *chat.CreateSecondaryKeyRequest)
 	if err != nil {
 		return nil, status.Error(codes.PermissionDenied, "Пользователь не найден")
 	}
-	fmt.Println(user.ID)
 	_, err = chat_actions.CheckSecondaryKey(user.ID, in.GetChatId())
 
 	if err != nil {
@@ -127,7 +125,6 @@ func CreateSecondaryKey(ctx context.Context, in *chat.CreateSecondaryKeyRequest)
 func GetSecondaryKey(ctx context.Context, in *chat.GetSecondaryKeyRequest) (*chat.GetSecondaryKeyResponse, error) {
 	
 	user, err := helpers.GetUserFormMd(ctx)
-	fmt.Println(user.ID)
 	if err != nil {
 		return nil, status.Error(codes.PermissionDenied, "Пользователь не найден")
 	}

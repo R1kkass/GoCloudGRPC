@@ -37,22 +37,24 @@ func CheckAuth(ctx context.Context) error {
 }
 
 func CheckAuthInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	md, _ := metadata.FromIncomingContext(ctx)
-
-	jwtToken, ok := md["authorization"]
-	if !ok || len(jwtToken) < 1 {
-		return nil, status.Error(codes.Unauthenticated, "не авторизован")
-	}
-
-	jwtToken = strings.Split(jwtToken[0], " ")
-
-	token, err := jwt.Parse(jwtToken[1], func(token *jwt.Token) (interface{}, error) {
-		return []byte(seccretKey), nil
-	})
-
-	if !token.Valid || err != nil {
-		return nil, status.Error(codes.Unauthenticated, "не авторизован")
+	if strings.Split(info.FullMethod, "/")[1]!="auth.AuthGreet"  {
+		md, _ := metadata.FromIncomingContext(ctx)
+		jwtToken, ok := md["authorization"]
+		if !ok || len(jwtToken) < 1 {
+			return nil, status.Error(codes.Unauthenticated, "не авторизован")
+		}
+	
+		jwtToken = strings.Split(jwtToken[0], " ")
+	
+		token, err := jwt.Parse(jwtToken[1], func(token *jwt.Token) (interface{}, error) {
+			return []byte(seccretKey), nil
+		})
+	
+		if !token.Valid || err != nil {
+			return nil, status.Error(codes.Unauthenticated, "не авторизован")
+		}
 	}
 	m, err := handler(ctx, req)
+
 	return m, err
 }

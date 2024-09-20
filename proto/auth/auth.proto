@@ -8,7 +8,7 @@ service AuthGreet {
     rpc Login(LoginRequest) returns (LoginResponse);
     rpc Registration(RegistrationRequest) returns (RegistrationResponse);
     rpc DHConnect(DHConnectRequest) returns (DHConnectResponse);
-    rpc DHSecondConnect(DHConnectRequest) returns (DHSecondConnectResponse);
+    rpc DHSecondConnect(DHSecondConnectRequest) returns (DHSecondConnectResponse);
 };
 
 message LoginRequest {
@@ -38,12 +38,10 @@ message DHConnectResponse {
     string p = 1;
     int64 g = 2;
     string b = 3;
-    string userIdKey = 4;
 }
 
 message DHSecondConnectRequest {
     string a = 1;
-    string userIdKey = 2;
 }
 
 message DHSecondConnectResponse {

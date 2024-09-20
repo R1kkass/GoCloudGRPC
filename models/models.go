@@ -139,3 +139,12 @@ type KeysSecondary struct {
 	ChatID uint `json:"chat_id"`
 	Key string `json:"key"`
 }
+
+type SavedKeys struct {
+	DefaultModel
+
+	UserID uint `json:"user_id"`
+	Token string `json:"token"`
+	Ip string `json:"ip"`
+	Name string `json:"name"`
+}
