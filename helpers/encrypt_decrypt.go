@@ -8,13 +8,14 @@ import (
 	"math/big"
 )
 
-func GenerateSecretKey(p *big.Int, b string, A string) (*big.Int, error) {
+func GenerateSecretKey(p string, b string, A string) (*big.Int, error) {
 	B, _ := new(big.Int).SetString(b, 0)
+	P, _ := new(big.Int).SetString(p, 0)
 	secretKey := new(big.Int)
 	userKey := new(big.Int)
 	userKey, _ = userKey.SetString(A, 0)
 	secretKey = secretKey.Exp(userKey, B, nil)
-	secretKey = secretKey.Mod(secretKey, p)
+	secretKey = secretKey.Mod(secretKey, P)
 	return secretKey, nil
 }
 

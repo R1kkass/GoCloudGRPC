@@ -27,7 +27,7 @@ type User struct {
 	DefaultModel
 	ID       uint   `gorm:"primary_key" json:"id"`
 	Email    string `json:"email"`
-	Name     string `json:"Name"`
+	Name     string `json:"name"`
 	Password string `json:"-"`
 	Files    []File
 	Folders  []Folder
@@ -104,7 +104,6 @@ type Chat struct {
 	Message  Message   `json:"message" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 	ChatUsers []ChatUser `json:"chat_users"`
 	NameChat  string     `json:"name_chat"`
-
 }
 
 type ChatUser struct {
@@ -113,6 +112,7 @@ type ChatUser struct {
 
 	ChatID int   `json:"chat_id"`
 	Chat   *Chat `json:"chat" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
+	SubmitCreate bool `json:"submit_create" gorm:"default:false"`
 }
 
 type Message struct {
@@ -147,4 +147,5 @@ type SavedKeys struct {
 	Token string `json:"token"`
 	Ip string `json:"ip"`
 	Name string `json:"name"`
+	DateEnd uint `json:"date_end"`
 }

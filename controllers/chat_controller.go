@@ -36,7 +36,7 @@ func CreateChat(ctx context.Context, in *chat.CreateRequestChat) (*chat.CreateRe
 	var g int64
 
 	err = db.DB.Transaction(func(tx *gorm.DB) error {
-		result := db.DB.Create(
+		result := tx.Create(
 			&chats,
 		)
 		var chatUsers Model.ChatUser
@@ -45,18 +45,20 @@ func CreateChat(ctx context.Context, in *chat.CreateRequestChat) (*chat.CreateRe
 			return errors.New("чат не создан")
 		}
 
-		result = db.DB.Model(&chatUsers).Create(
+		result = tx.Model(&chatUsers).Create(
 			&Model.ChatUser{
 				ChatID: int(chats.ID),
 				UserRelation: Model.UserRelation{
 					UserID: int(user.ID),
 				},
+				SubmitCreate: true,
 			},
 		).Create(&Model.ChatUser{
 			ChatID: int(chats.ID),
 			UserRelation: Model.UserRelation{
 				UserID: int(in.GetOtherId()),
 			},
+			SubmitCreate: false,
 		})
 
 		if result.Error != nil {
@@ -83,14 +85,14 @@ func CreateChat(ctx context.Context, in *chat.CreateRequestChat) (*chat.CreateRe
 
 
 
-func GetChat(ctx context.Context, in *chat.Empty) (*chat.GetResponseChat, error) {
+func GetChat(ctx context.Context, in *chat.GetRequestChat) (*chat.GetResponseChat, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	jwtToken, _ := md["authorization"]
 	user, _ := helpers.GetUser(jwtToken)
 
 	var chats []*chat.ChatUsers
 
-	db.DB.Model(&Model.ChatUser{}).Preload("User").Preload("Chat").Preload("Chat.Message").Preload("Chat.ChatUsers.User").Where("user_id = ?", user.ID).Find(&chats)
+	db.DB.Model(&Model.ChatUser{}).Preload("User").Preload("Chat").Preload("Chat.Message").Preload("Chat.ChatUsers.User").Where("user_id = ? AND submit_create = ?", user.ID, in.GetSubmitCreate()).Find(&chats)
  
 	out, _ := json.Marshal(chats)
 	md.Set("text", string(out))
@@ -168,5 +170,55 @@ func GetPublicKey(ctx context.Context, in *chat.GetPublicKeyRequest) (*chat.GetP
 	return &chat.GetPublicKeyResponse{
 		G: keys.G,
 		P: keys.P,
+	}, nil
+}
+
+func AcceptChat(ctx context.Context, in *chat.AcceptChatRequest) (*chat.AcceptChatResponse, error) {
+	
+	var chatUsers = Model.ChatUser{
+		DefaultModel: Model.DefaultModel{
+			ID: uint(in.GetChatId()),
+		},
+	}
+
+	db.DB.Model(&chatUsers).Update("submit_create", true)
+
+	return &chat.AcceptChatResponse{
+		Message: "Успех",
+	}, nil
+}
+
+func DissalowChat(ctx context.Context, in *chat.DissalowChatRequest) (*chat.DissalowChatResponse, error) {
+	var chatUser Model.ChatUser 
+
+	// defer func() {
+	// 	if r := recover(); r != nil {
+	// 		fmt.Println("error ", r)
+	// 	}
+	// }()
+
+	result := db.DB.Model(&Model.ChatUser{}).Where("id = ?", in.GetChatId()).First(&chatUser)
+
+	if result.Error != nil || result.RowsAffected == 0 {
+		return nil, status.Error(codes.Aborted, "Чат не найден")
+	}
+
+	db.DB.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("id=?", chatUser.ChatID).Delete(&Model.Chat{})
+		if result.Error != nil {
+			return errors.New("ошибка")
+		}
+	
+		result = tx.Where("chat_id = ?", chatUser.ChatID).Delete(Model.ChatUser{})
+
+		if result.Error != nil {
+			return errors.New("ошибка")
+		}
+
+		return nil
+	})
+	
+	return &chat.DissalowChatResponse{
+		Message: "Успех",
 	}, nil
 }

@@ -6,10 +6,28 @@ package chat;
 
 service ChatGreeter {
     rpc CreateChat(CreateRequestChat) returns (CreateResponseChat);
-    rpc GetChat(Empty) returns (GetResponseChat);
+    rpc GetChat(GetRequestChat) returns (GetResponseChat);
     rpc CreateSecondaryKey(CreateSecondaryKeyRequest) returns (CreateSecondaryKeyResponse);
     rpc GetSecondaryKey(GetSecondaryKeyRequest) returns (GetSecondaryKeyResponse);
     rpc GetPublicKey(GetPublicKeyRequest) returns (GetPublicKeyResponse);
+    rpc AcceptChat(AcceptChatRequest) returns (AcceptChatResponse);
+    rpc DissalowChat(DissalowChatRequest) returns (DissalowChatResponse);
+}
+
+message AcceptChatRequest {
+    uint32 chat_id = 1;
+}
+
+message AcceptChatResponse {
+    string message = 1;
+}
+
+message DissalowChatRequest {
+    uint32 chat_id = 1;
+}
+
+message DissalowChatResponse {
+    string message = 1;
 }
 
 message CreateRequestChat {
@@ -27,7 +45,9 @@ message Keys {
     int64 g = 2;
 }
 
-message Empty {}
+message GetRequestChat {
+    bool submit_create = 1;
+}
 
 message GetResponseChat {
     repeated ChatUsers chats = 1;

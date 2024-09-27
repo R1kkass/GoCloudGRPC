@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v3.12.4
-// source: chat.proto
+// source: chat/chat.proto
 
 package chat
 
@@ -23,10 +23,12 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ChatGreeterClient interface {
 	CreateChat(ctx context.Context, in *CreateRequestChat, opts ...grpc.CallOption) (*CreateResponseChat, error)
-	GetChat(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*GetResponseChat, error)
+	GetChat(ctx context.Context, in *GetRequestChat, opts ...grpc.CallOption) (*GetResponseChat, error)
 	CreateSecondaryKey(ctx context.Context, in *CreateSecondaryKeyRequest, opts ...grpc.CallOption) (*CreateSecondaryKeyResponse, error)
 	GetSecondaryKey(ctx context.Context, in *GetSecondaryKeyRequest, opts ...grpc.CallOption) (*GetSecondaryKeyResponse, error)
 	GetPublicKey(ctx context.Context, in *GetPublicKeyRequest, opts ...grpc.CallOption) (*GetPublicKeyResponse, error)
+	AcceptChat(ctx context.Context, in *AcceptChatRequest, opts ...grpc.CallOption) (*AcceptChatResponse, error)
+	DissalowChat(ctx context.Context, in *DissalowChatRequest, opts ...grpc.CallOption) (*DissalowChatResponse, error)
 }
 
 type chatGreeterClient struct {
@@ -46,7 +48,7 @@ func (c *chatGreeterClient) CreateChat(ctx context.Context, in *CreateRequestCha
 	return out, nil
 }
 
-func (c *chatGreeterClient) GetChat(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*GetResponseChat, error) {
+func (c *chatGreeterClient) GetChat(ctx context.Context, in *GetRequestChat, opts ...grpc.CallOption) (*GetResponseChat, error) {
 	out := new(GetResponseChat)
 	err := c.cc.Invoke(ctx, "/chat.ChatGreeter/GetChat", in, out, opts...)
 	if err != nil {
@@ -82,15 +84,35 @@ func (c *chatGreeterClient) GetPublicKey(ctx context.Context, in *GetPublicKeyRe
 	return out, nil
 }
 
+func (c *chatGreeterClient) AcceptChat(ctx context.Context, in *AcceptChatRequest, opts ...grpc.CallOption) (*AcceptChatResponse, error) {
+	out := new(AcceptChatResponse)
+	err := c.cc.Invoke(ctx, "/chat.ChatGreeter/AcceptChat", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatGreeterClient) DissalowChat(ctx context.Context, in *DissalowChatRequest, opts ...grpc.CallOption) (*DissalowChatResponse, error) {
+	out := new(DissalowChatResponse)
+	err := c.cc.Invoke(ctx, "/chat.ChatGreeter/DissalowChat", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChatGreeterServer is the server API for ChatGreeter service.
 // All implementations must embed UnimplementedChatGreeterServer
 // for forward compatibility
 type ChatGreeterServer interface {
 	CreateChat(context.Context, *CreateRequestChat) (*CreateResponseChat, error)
-	GetChat(context.Context, *Empty) (*GetResponseChat, error)
+	GetChat(context.Context, *GetRequestChat) (*GetResponseChat, error)
 	CreateSecondaryKey(context.Context, *CreateSecondaryKeyRequest) (*CreateSecondaryKeyResponse, error)
 	GetSecondaryKey(context.Context, *GetSecondaryKeyRequest) (*GetSecondaryKeyResponse, error)
 	GetPublicKey(context.Context, *GetPublicKeyRequest) (*GetPublicKeyResponse, error)
+	AcceptChat(context.Context, *AcceptChatRequest) (*AcceptChatResponse, error)
+	DissalowChat(context.Context, *DissalowChatRequest) (*DissalowChatResponse, error)
 	mustEmbedUnimplementedChatGreeterServer()
 }
 
@@ -101,7 +123,7 @@ type UnimplementedChatGreeterServer struct {
 func (UnimplementedChatGreeterServer) CreateChat(context.Context, *CreateRequestChat) (*CreateResponseChat, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateChat not implemented")
 }
-func (UnimplementedChatGreeterServer) GetChat(context.Context, *Empty) (*GetResponseChat, error) {
+func (UnimplementedChatGreeterServer) GetChat(context.Context, *GetRequestChat) (*GetResponseChat, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetChat not implemented")
 }
 func (UnimplementedChatGreeterServer) CreateSecondaryKey(context.Context, *CreateSecondaryKeyRequest) (*CreateSecondaryKeyResponse, error) {
@@ -112,6 +134,12 @@ func (UnimplementedChatGreeterServer) GetSecondaryKey(context.Context, *GetSecon
 }
 func (UnimplementedChatGreeterServer) GetPublicKey(context.Context, *GetPublicKeyRequest) (*GetPublicKeyResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPublicKey not implemented")
+}
+func (UnimplementedChatGreeterServer) AcceptChat(context.Context, *AcceptChatRequest) (*AcceptChatResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AcceptChat not implemented")
+}
+func (UnimplementedChatGreeterServer) DissalowChat(context.Context, *DissalowChatRequest) (*DissalowChatResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DissalowChat not implemented")
 }
 func (UnimplementedChatGreeterServer) mustEmbedUnimplementedChatGreeterServer() {}
 
@@ -145,7 +173,7 @@ func _ChatGreeter_CreateChat_Handler(srv interface{}, ctx context.Context, dec f
 }
 
 func _ChatGreeter_GetChat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Empty)
+	in := new(GetRequestChat)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -157,7 +185,7 @@ func _ChatGreeter_GetChat_Handler(srv interface{}, ctx context.Context, dec func
 		FullMethod: "/chat.ChatGreeter/GetChat",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ChatGreeterServer).GetChat(ctx, req.(*Empty))
+		return srv.(ChatGreeterServer).GetChat(ctx, req.(*GetRequestChat))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -216,6 +244,42 @@ func _ChatGreeter_GetPublicKey_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatGreeter_AcceptChat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AcceptChatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatGreeterServer).AcceptChat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/chat.ChatGreeter/AcceptChat",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatGreeterServer).AcceptChat(ctx, req.(*AcceptChatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatGreeter_DissalowChat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DissalowChatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatGreeterServer).DissalowChat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/chat.ChatGreeter/DissalowChat",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatGreeterServer).DissalowChat(ctx, req.(*DissalowChatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChatGreeter_ServiceDesc is the grpc.ServiceDesc for ChatGreeter service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -243,7 +307,15 @@ var ChatGreeter_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetPublicKey",
 			Handler:    _ChatGreeter_GetPublicKey_Handler,
 		},
+		{
+			MethodName: "AcceptChat",
+			Handler:    _ChatGreeter_AcceptChat_Handler,
+		},
+		{
+			MethodName: "DissalowChat",
+			Handler:    _ChatGreeter_DissalowChat_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "chat.proto",
+	Metadata: "chat/chat.proto",
 }

@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"mypackages/consts"
 	"mypackages/db"
 	"mypackages/helpers"
@@ -39,7 +38,7 @@ func CreateAccess(ctx context.Context, in *access.RequestAccess) (*access.Respon
 	result := db.DB.Model(&Model.RequestAccess{}).Where("file_id = ? AND folder_id = ? AND user_id = ? AND current_user_id = ?", in.GetFileId(), in.GetFolderId(), in.GetUserId(), user.ID).Find(&request_access)
 
 	if in.GetUserId() != int32(user.ID) &&
-		(folder.AccessId == consts.WITH_PERMISSION || folder.AccessId == consts.WITH_PERMISSION) && result.RowsAffected == 0 {
+		(folder.AccessId == consts.WITH_PERMISSION) && result.RowsAffected == 0 {
 		db.DB.Create(&Model.RequestAccess{
 			UserID:        int(in.GetUserId()),
 			CurrentUserID: int(user.ID),
@@ -97,36 +96,4 @@ func ChangeAccess(ctx context.Context, in *access.ChangeAccessRequest) (*access.
 	return &access.ChangeAccessResponse{
 		Message: "success",
 	}, nil
-}
-
-type SomeAbstr interface {
-    move()
-}
-
-func (s *SomeStruct) move() {
-    fmt.Println("двигать")
-}
-
-func (s SomeType) move() {
-	fmt.Println("someType")
-}
-
-
-type SomeType string
-
-type SomeStruct struct{
-	SomeAbstr
-}
-
-
-func main() {
-    
-    var c SomeAbstr = &SomeStruct{}
-    var c2 SomeStruct
-    
-	c2.move()
-
-    c.move()
-    c = SomeType("")
-	c.move()
 }

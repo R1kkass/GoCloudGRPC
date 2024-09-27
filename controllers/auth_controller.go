@@ -26,7 +26,6 @@ type KeyUser struct {
 }
 
 var keysUser  = make(map[string]KeyUser)
-var generatedKeys  = make(map[string]string)
 
 func Login(ctx context.Context, in *auth.LoginRequest) (*auth.LoginResponse, error) {
 
@@ -35,9 +34,12 @@ func Login(ctx context.Context, in *auth.LoginRequest) (*auth.LoginResponse, err
 	per, _ := peer.FromContext(ctx)
 	ip := per.Addr.String()
 
-	defer delete(generatedKeys, ip);
+	secretKey, err := db.ConnectRedisDB.HGet(ctx, "generatedKeys:", ip).Result()
 
-	secretKey := generatedKeys[ip]
+	if err != nil {
+		return nil, status.Error(codes.Aborted, "Ключи не созданы")
+	}
+
 	password := helpers.Decrypt(in.GetPassword(), secretKey)
 	email := helpers.Decrypt(in.GetEmail(), secretKey)
 
@@ -72,9 +74,11 @@ func Registration(ctx context.Context, in *auth.RegistrationRequest) (*auth.Regi
 	p, _ := peer.FromContext(ctx)
 	ip:=p.Addr.String()
 	
-	secretKey := generatedKeys[ip]
-
-	defer delete(generatedKeys, ip);
+	secretKey, err := db.ConnectRedisDB.HGet(ctx, "generatedKeys:", ip).Result()
+	
+	if err != nil {
+		return nil, status.Error(codes.Aborted, "Ключ не созданы")
+	}
 
 	password := helpers.Decrypt(in.GetPassword(), secretKey)
 	email := helpers.Decrypt(in.GetEmail(), secretKey)
@@ -129,6 +133,18 @@ func DHConnect(ctx context.Context, in *auth.DHConnectRequest) (*auth.DHConnectR
 		g: g,
 		b: b,
 	}
+
+	keys := map[string]any{
+		"p": p.String(),
+		"b": b.String(),
+	} 
+
+	err := db.ConnectRedisDB.HMSet(ctx, "keysUser:"+ip, keys).Err()
+	
+	if err != nil {
+		fmt.Println(err)
+		return nil, status.Error(codes.Aborted, "Ключ не создан")
+	}
 	
 	return &auth.DHConnectResponse{P: p.String(), G: g, B: B.String()}, nil
 }
@@ -137,16 +153,29 @@ func DHSecondConnect(ctx context.Context, in *auth.DHSecondConnectRequest) (*aut
 	p, _ := peer.FromContext(ctx)
 	ip:=p.Addr.String()
 
-	keys := keysUser[ip]
-	b, _ := helpers.GenerateSecretKey(keys.p, keys.b.String(), in.GetA())
+	// keys := keysUser[ip]
+	KeyP, err := db.ConnectRedisDB.HMGet(ctx, "keysUser:"+ip, "p").Result()
+	
+	if err != nil {
+		return nil, status.Error(codes.Aborted, "Ключ не создан")
+	}
+
+	KeyB, err := db.ConnectRedisDB.HMGet(ctx, "keysUser:"+ip, "b").Result()
+	if err != nil {
+		return nil, status.Error(codes.Aborted, "Ключ не создан")
+	}
+	
+	b, _ := helpers.GenerateSecretKey(fmt.Sprintf("%v", KeyP[0]), fmt.Sprintf("%v", KeyB[0]), in.GetA())
 	
 	bytes := []byte(b.String())
 	hash := sha256.Sum256(bytes)
 	hashString := hex.EncodeToString(hash[:])
+	err = db.ConnectRedisDB.HSet(ctx, "generatedKeys:", ip, string(hashString)[0:32]).Err()
 
-	generatedKeys[ip] = string(hashString)[0:32]
-	fmt.Println(string(hashString)[0:32])
-	fmt.Println("string(hashString)[0:32]")
+	if err != nil {
+		return nil, status.Error(codes.Aborted, "Ключ не создан")
+	}
+
 	return &auth.DHSecondConnectResponse{
 		Message: "Ключ успешно создан",
 	}, nil

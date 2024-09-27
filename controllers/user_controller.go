@@ -4,13 +4,18 @@ import (
 	"context"
 	"mypackages/consts"
 	"mypackages/db"
+	"mypackages/helpers"
 	Model "mypackages/models"
 	"mypackages/proto/users"
+	"strconv"
 )
 
 func GetUsers(ctx context.Context, in *users.GetUsersRequest) (*users.GetUsersResponse, error) {
 	var usersList []Model.User
-	db.DB.Model(&Model.User{}).Where("name LIKE ?", "%"+in.GetUserName()+"%").Or("email LIKE ?", "%"+in.GetUserName()+"%").Find(&usersList)
+	user, _ := helpers.GetUserFormMd(ctx)
+
+	db.DB.Model(&Model.User{}).Where("id != " + strconv.Itoa(int(user.ID)) +" AND (name LIKE name '%"+in.GetUserName()+"%' OR email LIKE '%"+in.GetUserName()+"%')").Find(&usersList)
+	
 	var usersResponse []*users.Users
 
 	for i := 0; i < len(usersList); i++ {
