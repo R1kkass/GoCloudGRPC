@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+option go_package = "./files";
+
+package files;
+
+service FilesGreeter {
+    rpc UploadFile(stream FileUploadRequest) returns (FileUploadResponse);
+    rpc DownloadFile(FileDownloadRequest) returns (stream FileDownloadResponse);
+}
+
+message FileUploadRequest {
+    bytes chunk = 1;
+    string fileName = 2;
+    uint32 folderId = 3;
+}
+
+message FileUploadResponse {
+    string message = 1;
+}
+
+message FileDownloadRequest {
+    uint32 fileId = 1;
+    uint32 folderId = 2;
+}
+
+message FileDownloadResponse {
+    bytes chunk = 1;
+    string fileName = 2;
+    float progress = 3;
+}

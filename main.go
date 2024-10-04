@@ -9,6 +9,7 @@ import (
 	access "mypackages/proto/access"
 	"mypackages/proto/auth"
 	"mypackages/proto/chat"
+	"mypackages/proto/files"
 	"mypackages/proto/keys"
 	users "mypackages/proto/users"
 
@@ -52,6 +53,7 @@ func main() {
 	chat.RegisterChatGreeterServer(s, &chatServer{})
 	auth.RegisterAuthGreetServer(s, &authServer{})
 	keys.RegisterKeysGreeterServer(s, &keysServer{})
+	files.RegisterFilesGreeterServer(s, &filesServer{})
 	
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)

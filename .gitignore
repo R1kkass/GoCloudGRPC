@@ -7,7 +7,7 @@ tmp/*
 /.idea
 /.vscode
 /tmp/main
-/files/*
+/keys/*
 
 *.exe
 *.exe~

@@ -52,9 +52,10 @@ func (s *keysServer) DownloadKeys(in *keys.Empty, responseStream keys.KeysGreete
         fmt.Println(err)
         return err
     }
+	var pathKeysFolder, _ = os.LookupEnv("PATH_KEYS")
 
 	bufferSize := 64 *1024
-    file, err := os.Open("keys/"+strconv.Itoa(int(user.ID)))
+    file, err := os.Open(pathKeysFolder+strconv.Itoa(int(user.ID)))
     if err != nil {
         fmt.Println(err)
         return err

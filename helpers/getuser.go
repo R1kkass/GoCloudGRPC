@@ -2,7 +2,6 @@ package helpers
 
 import (
 	"errors"
-	"fmt"
 	"mypackages/db"
 	Model "mypackages/models"
 	"strings"
@@ -11,7 +10,6 @@ import (
 func GetUser(jwtToken []string) (*Model.User, error) {
 	jwtToken = strings.Split(jwtToken[0], " ")
 	email := ParseJWT(jwtToken[1])
-	fmt.Println(email)
 
 	var user Model.User;
 	r := db.DB.Model(&Model.User{}).Where("email=?", email).First(&user)

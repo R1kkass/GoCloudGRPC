@@ -204,16 +204,17 @@ func DissalowChat(ctx context.Context, in *chat.DissalowChatRequest) (*chat.Diss
 	}
 
 	db.DB.Transaction(func(tx *gorm.DB) error {
-		result := tx.Where("id=?", chatUser.ChatID).Delete(&Model.Chat{})
-		if result.Error != nil {
-			return errors.New("ошибка")
-		}
-	
 		result = tx.Where("chat_id = ?", chatUser.ChatID).Delete(Model.ChatUser{})
 
 		if result.Error != nil {
 			return errors.New("ошибка")
 		}
+
+		result := tx.Where("id=?", chatUser.ChatID).Delete(&Model.Chat{})
+		if result.Error != nil {
+			return errors.New("ошибка")
+		}
+	
 
 		return nil
 	})
