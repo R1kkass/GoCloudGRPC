@@ -24,8 +24,9 @@ func (s *keysServer) UploadKeys(ctx context.Context, in *keys.FileUploadRequest)
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "Пользователь не найден")
 	}
+	var pathKeysFolder, _ = os.LookupEnv("PATH_KEYS")
 
-	file, err := os.Create("keys/"+strconv.Itoa(int(user.ID)))
+	file, err := os.Create(pathKeysFolder+strconv.Itoa(int(user.ID)))
 
 	if err != nil {
 		log.Println("UploadKeys err: ", err)
