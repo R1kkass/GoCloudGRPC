@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+option go_package = "./notification";
+
+package notification;
+
+service NotificationGreeter{
+    rpc GetNotification(Empty) returns (stream NotificationMessage);
+}
+
+message NotificationMessage {
+    string type = 1;
+    string title = 2;
+    string description = 3;
+}
+
+message Empty{}

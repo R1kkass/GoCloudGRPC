@@ -11,6 +11,7 @@ import (
 	"mypackages/proto/chat"
 	"mypackages/proto/files"
 	"mypackages/proto/keys"
+	"mypackages/proto/notification"
 	users "mypackages/proto/users"
 
 	"github.com/joho/godotenv"
@@ -33,6 +34,8 @@ func init() {
 func main() {
 	db.ConnectDatabase()
 	db.ConnectRedis()
+	db.ConnectRedisNotification()
+
 	lis, err := net.Listen("tcp", ":50051")
 
 	if err != nil {
@@ -54,6 +57,7 @@ func main() {
 	auth.RegisterAuthGreetServer(s, &authServer{})
 	keys.RegisterKeysGreeterServer(s, &keysServer{})
 	files.RegisterFilesGreeterServer(s, &filesServer{})
+	notification.RegisterNotificationGreeterServer(s, &notificationServer{})
 	
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)

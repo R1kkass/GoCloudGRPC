@@ -24,6 +24,7 @@ const _ = grpc.SupportPackageIsVersion7
 type FilesGreeterClient interface {
 	UploadFile(ctx context.Context, opts ...grpc.CallOption) (FilesGreeter_UploadFileClient, error)
 	DownloadFile(ctx context.Context, in *FileDownloadRequest, opts ...grpc.CallOption) (FilesGreeter_DownloadFileClient, error)
+	FindFile(ctx context.Context, in *FindFileRequest, opts ...grpc.CallOption) (*FindFileResponse, error)
 }
 
 type filesGreeterClient struct {
@@ -100,12 +101,22 @@ func (x *filesGreeterDownloadFileClient) Recv() (*FileDownloadResponse, error) {
 	return m, nil
 }
 
+func (c *filesGreeterClient) FindFile(ctx context.Context, in *FindFileRequest, opts ...grpc.CallOption) (*FindFileResponse, error) {
+	out := new(FindFileResponse)
+	err := c.cc.Invoke(ctx, "/files.FilesGreeter/FindFile", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FilesGreeterServer is the server API for FilesGreeter service.
 // All implementations must embed UnimplementedFilesGreeterServer
 // for forward compatibility
 type FilesGreeterServer interface {
 	UploadFile(FilesGreeter_UploadFileServer) error
 	DownloadFile(*FileDownloadRequest, FilesGreeter_DownloadFileServer) error
+	FindFile(context.Context, *FindFileRequest) (*FindFileResponse, error)
 	mustEmbedUnimplementedFilesGreeterServer()
 }
 
@@ -118,6 +129,9 @@ func (UnimplementedFilesGreeterServer) UploadFile(FilesGreeter_UploadFileServer)
 }
 func (UnimplementedFilesGreeterServer) DownloadFile(*FileDownloadRequest, FilesGreeter_DownloadFileServer) error {
 	return status.Errorf(codes.Unimplemented, "method DownloadFile not implemented")
+}
+func (UnimplementedFilesGreeterServer) FindFile(context.Context, *FindFileRequest) (*FindFileResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FindFile not implemented")
 }
 func (UnimplementedFilesGreeterServer) mustEmbedUnimplementedFilesGreeterServer() {}
 
@@ -179,13 +193,36 @@ func (x *filesGreeterDownloadFileServer) Send(m *FileDownloadResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _FilesGreeter_FindFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FindFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FilesGreeterServer).FindFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/files.FilesGreeter/FindFile",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FilesGreeterServer).FindFile(ctx, req.(*FindFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // FilesGreeter_ServiceDesc is the grpc.ServiceDesc for FilesGreeter service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var FilesGreeter_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "files.FilesGreeter",
 	HandlerType: (*FilesGreeterServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "FindFile",
+			Handler:    _FilesGreeter_FindFile_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "UploadFile",

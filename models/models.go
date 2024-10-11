@@ -149,3 +149,12 @@ type SavedKeys struct {
 	Name string `json:"name"`
 	DateEnd uint `json:"date_end"`
 }
+
+type Notification struct {
+	DefaultModel
+	UserRelation
+
+	Title string `json:"title"`
+	Description string `json:"description"`
+	Readed bool `json:"readed"`
+}

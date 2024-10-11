@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -90,19 +91,17 @@ func UploadFile(stream files.FilesGreeter_UploadFileServer) error{
 	user, err := helpers.GetUserFormMd(stream.Context())
 	
 	if err != nil {
-		return stream.SendAndClose(&files.FileUploadResponse{Message: "Пользователь не найден"})
+		return status.Error(codes.Internal, "Пользователь не найден")
 	}
 
 	filesNameHash := uuid.New().String()
 
-	var fileSize uint32
+	var fileSize uint32 = 0
 	req, err := stream.Recv()
 
 	if err != nil || !policy.FolderPolicyID(req.GetFolderId(), user){
-		return stream.SendAndClose(&files.FileUploadResponse{Message: "Не удалось загрузить файл"})
+		return status.Error(codes.Internal, "Не удалось загрузить файл")
 	}
-
-    fileSize = 0
 
 	result, file := createFile(req, user, filesNameHash)
 
@@ -226,4 +225,34 @@ func writeInFile(req *files.FileUploadRequest, dst *os.File, fileSize *uint32, u
 		return errors.New("недостаточно места")
 	}
 	return nil
+}
+
+func FindFile(context context.Context, in *files.FindFileRequest) (*files.FindFileResponse, error) {
+	user, err := helpers.GetUserFormMd(context)
+	var file []*files.FileFind
+	var folder []*files.FolderFind
+
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "Пользователь не найден")
+	}
+
+	qFile:=db.DB.Model(&Model.File{}).Where("user_id = ?", user.ID)
+	qFolder:=db.DB.Model(&Model.Folder{}).Where("user_id = ?", user.ID)
+	
+	if !in.GetFindEveryWhere() {
+		if (in.GetFolderId() == 0) {
+			qFile.Where("folder_id is NULL")
+			qFolder.Where("folder_id is NULL")
+		} else{
+			qFile.Where("folder_id = ?", in.GetFolderId())
+			qFolder.Where("folder_id = ?", in.GetFolderId())
+		}
+	}
+	qFile.Where("file_name LIKE ?", "%"+in.GetSearch()+"%").Limit(10).Offset((int(in.GetPage())-1)*10).Find(&file)
+	qFolder.Where("name_folder LIKE ?", "%"+in.GetSearch()+"%").Limit(10).Offset((int(in.GetPage())-1)*10).Find(&folder)
+
+	return &files.FindFileResponse{
+		Files: file,
+		Folders: folder,
+	}, nil
 }

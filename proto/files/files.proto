@@ -7,6 +7,7 @@ package files;
 service FilesGreeter {
     rpc UploadFile(stream FileUploadRequest) returns (FileUploadResponse);
     rpc DownloadFile(FileDownloadRequest) returns (stream FileDownloadResponse);
+    rpc FindFile(FindFileRequest) returns (FindFileResponse);
 }
 
 message FileUploadRequest {
@@ -28,4 +29,38 @@ message FileDownloadResponse {
     bytes chunk = 1;
     string fileName = 2;
     float progress = 3;
+}
+
+message FindFileRequest {
+    string search = 1;
+    uint32 folderId = 2;
+    bool findEveryWhere = 3;
+    uint32 page = 4;
+}
+
+message FindFileResponse {
+    repeated FileFind files = 1;
+    repeated FolderFind folders = 2;
+}
+
+message FileFind {
+    int32 id = 1;
+    string created_at = 2;
+    string updated_at = 3;
+    int32 user_id = 4;
+    int32 folder_id = 5;
+    int64 size = 6;
+    string file_name = 7;
+    string file_name_hash = 8;
+    int32 access_id = 9;
+}
+
+message FolderFind {
+    int32 id = 1;
+    string created_at = 2;
+    string updated_at = 3;
+    int32 user_id = 4;
+    int32 folder_id = 5;
+    int32 access_id = 6;
+    string name_folder = 7;
 }
