@@ -8,10 +8,15 @@ import (
 
 var secretKey, _ = os.LookupEnv("SECRET_KEY")
 
-func ParseJWT(token string) string {
+func ParseJWT(token string) (string, error) {
 	claims := jwt.MapClaims{}
-	jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+	_, err:= jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
 		return []byte(secretKey), nil
 	})
-	return claims["email"].(string)
+
+	if err != nil {
+		return err.Error(), nil
+	}
+
+	return claims["email"].(string), nil
 }

@@ -100,9 +100,10 @@ type Status struct {
 type Chat struct {
 	DefaultModel
 
-	Messages []Message `json:"messages"`
+	Messages []Message
 	Message  Message   `json:"message" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 	ChatUsers []ChatUser `json:"chat_users"`
+	UnReadedMessages []UnReadedMessage `json:"un_readed_message"`
 	NameChat  string     `json:"name_chat"`
 }
 
@@ -113,6 +114,7 @@ type ChatUser struct {
 	ChatID int   `json:"chat_id"`
 	Chat   *Chat `json:"chat" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
 	SubmitCreate bool `json:"submit_create" gorm:"default:false"`
+	UnReadedMessagesCount int `gorm:"-:migration,column:un_readed_messages_count,default:null" json:"un_readed_messages_count"`
 }
 
 type Message struct {
@@ -150,11 +152,12 @@ type SavedKeys struct {
 	DateEnd uint `json:"date_end"`
 }
 
-type Notification struct {
+type UnReadedMessage struct{
 	DefaultModel
 	UserRelation
-
-	Title string `json:"title"`
-	Description string `json:"description"`
-	Readed bool `json:"readed"`
+		
+	ChatID int   `json:"chat_id"`
+	Chat   *Chat `json:"chat" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
+	MessageID uint `json:"message_id"`
+	Message *Message `json:"message" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
 }

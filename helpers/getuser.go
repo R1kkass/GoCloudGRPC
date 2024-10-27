@@ -13,7 +13,11 @@ func GetUser(jwtToken []string) (*Model.User, error) {
 	}
 
 	jwtToken = strings.Split(jwtToken[0], " ")
-	email := ParseJWT(jwtToken[1])
+	email, err := ParseJWT(jwtToken[1])
+
+	if err != nil {
+		return nil,  errors.New("токен не валиден")
+	} 
 
 	var user Model.User;
 	r := db.DB.Model(&Model.User{}).Where("email=?", email).First(&user)

@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 
+	"mypackages/controllers"
 	db "mypackages/db"
 	"mypackages/interceptor"
 	access "mypackages/proto/access"
@@ -45,15 +46,18 @@ func main() {
 	if err != nil {
 	   log.Fatal(err)
 	}
-
+	
 	s := grpc.NewServer(
 		// grpc.Creds(tlsCreds),
 		grpc.UnaryInterceptor(interceptor.CheckAuthInterceptor),
+		// grpc.StreamInterceptor(interceptor.CheckAuthInterceptorStream),
 	)
 
 	users.RegisterUsersGreetServer(s, &usersServer{})
 	access.RegisterAccessGreeterServer(s, &accessServer{})
-	chat.RegisterChatGreeterServer(s, &chatServer{})
+	chat.RegisterChatGreeterServer(s, &chatServer{
+		Conns: make(map[string]controllers.DataStreamConnect),
+	})
 	auth.RegisterAuthGreetServer(s, &authServer{})
 	keys.RegisterKeysGreeterServer(s, &keysServer{})
 	files.RegisterFilesGreeterServer(s, &filesServer{})

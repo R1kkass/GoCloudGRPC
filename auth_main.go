@@ -25,3 +25,7 @@ func (r *authServer) DHConnect(ctx context.Context, in *auth.DHConnectRequest) (
 func (r *authServer) DHSecondConnect(ctx context.Context, in *auth.DHSecondConnectRequest) (*auth.DHSecondConnectResponse, error) {
 	return controllers.DHSecondConnect(ctx, in)
 }
+
+func (s *authServer) CheckAuth(ctx context.Context, in *auth.Empty) (*auth.Empty, error) {
+	return &auth.Empty{}, nil
+}

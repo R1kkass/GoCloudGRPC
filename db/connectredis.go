@@ -15,7 +15,6 @@ func ConnectRedis() *redis.Client{
     host, _ := os.LookupEnv("REDIS_HOST")
     port, _ := os.LookupEnv("REDIS_PORT")
 
-
     client := redis.NewClient(&redis.Options{
         Addr:	  host+":"+port,
         Password: redisPassword,

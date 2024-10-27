@@ -9,6 +9,7 @@ service AuthGreet {
     rpc Registration(RegistrationRequest) returns (RegistrationResponse);
     rpc DHConnect(DHConnectRequest) returns (DHConnectResponse);
     rpc DHSecondConnect(DHSecondConnectRequest) returns (DHSecondConnectResponse);
+    rpc CheckAuth(Empty) returns (Empty);
 };
 
 message LoginRequest {
@@ -33,6 +34,8 @@ message RegistrationResponse {
 message DHConnectRequest {
 
 }
+
+message Empty {}
 
 message DHConnectResponse {
     string p = 1;

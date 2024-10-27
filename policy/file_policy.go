@@ -37,3 +37,14 @@ func SpacePolicy(size uint32) bool {
 	}
 	return true
 }
+
+func CanGetMessages(chatId uint, userId uint32) bool {
+	var chatUser *Model.ChatUser
+	result := db.DB.Model(&Model.ChatUser{}).Where("chat_id = ? AND user_id = ?", chatId, userId).First(chatUser)
+	
+	if result.RowsAffected == 0 || result.Error != nil {
+		return false
+	}
+
+	return true
+}

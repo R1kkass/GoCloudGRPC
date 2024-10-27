@@ -12,6 +12,7 @@ message NotificationMessage {
     string type = 1;
     string title = 2;
     string description = 3;
+    map<string, string> options = 4;
 }
 
 message Empty{}

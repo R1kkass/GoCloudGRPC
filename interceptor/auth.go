@@ -2,7 +2,7 @@ package interceptor
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"os"
 	"strings"
 
@@ -13,13 +13,13 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+
 var seccretKey, _ = os.LookupEnv("SECRET_KEY")
 
-func CheckAuth(ctx context.Context) error {
-	md, _ := metadata.FromIncomingContext(ctx)
 
+func CheckAuthInterceptorStream(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	md, _ := metadata.FromIncomingContext(ss.Context())
 	jwtToken, ok := md["authorization"]
-	log.Printf("Received: %v", md)
 	if !ok || len(jwtToken) < 1 {
 		return status.Error(codes.Unauthenticated, "не авторизован")
 	}
@@ -30,14 +30,21 @@ func CheckAuth(ctx context.Context) error {
 		return []byte(seccretKey), nil
 	})
 
-	if !token.Valid || err != nil {
+	if err != nil || !token.Valid {
 		return status.Error(codes.Unauthenticated, "не авторизован")
 	}
-	return nil
+	err = handler(srv, ss)
+	if err != nil {
+		fmt.Println("RPC failed with error: %v", err)
+	}
+
+	return err
 }
 
 func CheckAuthInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	if strings.Split(info.FullMethod, "/")[1]!="auth.AuthGreet"  {
+	if strings.Split(info.FullMethod, "/")[1]!="auth.AuthGreet" || info.FullMethod == "/auth.AuthGreet/CheckAuth" {
+
+
 		md, _ := metadata.FromIncomingContext(ctx)
 		jwtToken, ok := md["authorization"]
 		if !ok || len(jwtToken) < 1 {
@@ -50,7 +57,7 @@ func CheckAuthInterceptor(ctx context.Context, req any, info *grpc.UnaryServerIn
 			return []byte(seccretKey), nil
 		})
 	
-		if !token.Valid || err != nil {
+		if err != nil || !token.Valid {
 			return nil, status.Error(codes.Unauthenticated, "не авторизован")
 		}
 	}
@@ -58,3 +65,4 @@ func CheckAuthInterceptor(ctx context.Context, req any, info *grpc.UnaryServerIn
 
 	return m, err
 }
+

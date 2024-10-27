@@ -4,47 +4,77 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"mypackages/db"
+	db "mypackages/db"
 	"mypackages/helpers"
-	"mypackages/proto/notification"
 	"strconv"
+
+	"mypackages/proto/notification"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type notificationServer struct {
 	notification.UnimplementedNotificationGreeterServer
 }
 
+
 func (s *notificationServer) GetNotification(in *notification.Empty, responseStream notification.NotificationGreeter_GetNotificationServer) error {
 	ctx := responseStream.Context()
-	user, _ := helpers.GetUserFormMd(ctx)
-	channel := make(chan map[string]string)
+	user, err := helpers.GetUserFormMd(ctx)
+	channel := make(chan map[string]any)
 
-	go func() {
-		for {
-
-			key := strconv.Itoa(int(user.ID)) + ":" + "*"
-			keys, _ := db.ConnectRedisNotificationDB.Keys(ctx, key).Result()
-			db.ConnectRedisNotificationDB.Watch(ctx, )
-			for _, v := range keys {
-				objects, _ := db.ConnectRedisNotificationDB.LRange(ctx, v, 0, -1).Result()
-				for _, o := range objects {
-					fmt.Println(o)
-					var mapMessage map[string]string
-					json.Unmarshal([]byte(o), &mapMessage)
-					channel <- mapMessage
-				}
-				db.ConnectRedisNotificationDB.Del(ctx, v)
-			}
+	defer func(){
+		if r:=recover(); r != nil {
+			fmt.Println("Error get notification: ", r)
 		}
 	}()
 
+	if err != nil {
+		return status.Error(codes.Unauthenticated, "Пользователь не найден")
+	}
+
+	go func() {
+
+			key := strconv.Itoa(int(user.ID)) + "_notification"
+			res := db.ConnectRedisNotificationDB.Subscribe(ctx, key)
+
+			for {
+				var jsonDecodeMsg map[string]any
+				message, err := res.ReceiveMessage(ctx)
+				json.Unmarshal([]byte(message.Payload), &jsonDecodeMsg)
+
+				if err != nil {
+					log.Println("Can not create subscribe")
+					return
+				}
+			
+				channel<-jsonDecodeMsg
+			}
+
+	}()
+
 	for {
-		val := <-channel
+		val:=<-channel
+
+		var options = make(map[string]string)
+		
+		if _, ok := val["options"]; ok {
+			for k, v := range val["options"].(map[string]any) {
+				options[k] = fmt.Sprintf("%v", v)
+			}
+		}
+
+		if _, ok := val["description"]; !ok {
+			val["description"] = ""
+		}
+
 		err := responseStream.Send(
 			&notification.NotificationMessage{
-				Type:          val["type"],
-				Description: val["description"],
-				Title:       val["title"],
+				Type:          val["type"].(string),
+				Description: val["description"].(string),
+				Title:       val["title"].(string),
+				Options: options,
 			},
 		)
 		if err != nil {
@@ -53,5 +83,4 @@ func (s *notificationServer) GetNotification(in *notification.Empty, responseStr
 		}
 	}
 
-	return nil
 }

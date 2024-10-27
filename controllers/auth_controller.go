@@ -70,6 +70,13 @@ func Login(ctx context.Context, in *auth.LoginRequest) (*auth.LoginResponse, err
 }
 
 func Registration(ctx context.Context, in *auth.RegistrationRequest) (*auth.RegistrationResponse, error) {
+
+	defer func() {
+		if recover()!=nil {
+			fmt.Println("Error registration: ", recover())
+		}
+	}()
+
 	var user *Model.User;
 	p, _ := peer.FromContext(ctx)
 	ip:=p.Addr.String()
@@ -97,21 +104,25 @@ func Registration(ctx context.Context, in *auth.RegistrationRequest) (*auth.Regi
 		Name: name,
 	}
 
-	r = db.DB.Create(&newUser)
-	os.Mkdir("files/"+strconv.Itoa(int(user.ID)), os.ModePerm)
+	r = db.DB.Create(&newUser).First(&newUser)
+	var pathFileFolder, _ = os.LookupEnv("PATH_FILES")
 
+	os.Mkdir(pathFileFolder+strconv.Itoa(int(newUser.ID)), os.ModePerm)
+	var pathKeyFolder, _ = os.LookupEnv("PATH_KEYS")
+
+	os.Create(pathKeyFolder+strconv.Itoa(int(newUser.ID)))
 	if r.RowsAffected==0{
 		return nil, status.Error(codes.Unauthenticated, "Не зарегистрирован")
 	}
 
-	secretToken, err := helpers.GenerateJWTToken(user, secretKey)
+	secretToken, err := helpers.GenerateJWTToken(&newUser, secretKey)
 
 	if err != nil {
 		return nil, status.Error(codes.Aborted, "Токен не создан")
 	}
 
 	db.DB.Model(&Model.SavedKeys{}).Create(&Model.SavedKeys{
-		UserID: user.ID,
+		UserID: newUser.ID,
 		Name: "",
 		Ip: ip,
 		Token: *secretToken,

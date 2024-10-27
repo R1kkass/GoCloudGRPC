@@ -26,7 +26,7 @@ func (s *keysServer) UploadKeys(ctx context.Context, in *keys.FileUploadRequest)
 	}
 	var pathKeysFolder, _ = os.LookupEnv("PATH_KEYS")
 
-	file, err := os.Create(pathKeysFolder+strconv.Itoa(int(user.ID)))
+	file, err := os.OpenFile(pathKeysFolder+strconv.Itoa(int(user.ID)),  os.O_WRONLY, 0666)
 
 	if err != nil {
 		log.Println("UploadKeys err: ", err)
@@ -48,6 +48,7 @@ func (s *keysServer) UploadKeys(ctx context.Context, in *keys.FileUploadRequest)
 
 func (s *keysServer) DownloadKeys(in *keys.Empty, responseStream keys.KeysGreeter_DownloadKeysServer) error {
 	user, err := helpers.GetUserFormMd(responseStream.Context())
+	fmt.Println("pathKeysFolder")
 
     if err != nil {
         fmt.Println(err)
@@ -74,6 +75,7 @@ func (s *keysServer) DownloadKeys(in *keys.Empty, responseStream keys.KeysGreete
         resp := &keys.FileDownloadResponse{
             Chunk: buff[:bytesRead],
         }
+		fmt.Println(resp)
         err = responseStream.Send(resp)
         if err != nil {
             log.Println("error while sending chunk:", err)
@@ -82,3 +84,4 @@ func (s *keysServer) DownloadKeys(in *keys.Empty, responseStream keys.KeysGreete
     }
     return nil
 }
+

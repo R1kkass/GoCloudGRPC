@@ -2,12 +2,14 @@ package chat_actions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"mypackages/db"
 	"mypackages/helpers"
 	Model "mypackages/models"
 	"mypackages/proto/chat"
+	"strconv"
 )
 
 func SendFirstParams(chat *Model.Chat) (string, int64) {
@@ -96,4 +98,64 @@ func CheckChatExist(ctx context.Context, in *chat.CreateRequestChat) error {
 	}
 
 	return nil
+}
+
+func NotificationChatCreate(userId int, objectMessage map[string]any) {
+	obj, err := json.Marshal(objectMessage);
+
+	if err != nil {
+		fmt.Println("Error send notification: ", err)
+		return
+	}
+
+	r:= db.ConnectRedisDB.Publish(context.TODO(), strconv.Itoa(userId) + "_notification", obj)
+	if r.Err() != nil {
+		fmt.Println("Error send notification: ", r.Err().Error())
+	}
+}
+
+func NotificationMessageCreate(chatId int, message string, userId int) {
+	
+	mapMessage := map[string]any{
+		"description": message,
+		"title": "Новое сообщение",
+		"type": "New_Message",
+		"options": map[string]string{
+			"chat_id": strconv.Itoa(chatId),
+		},
+	}
+	
+	objectMessage, _ := json.Marshal(mapMessage)
+
+	var users []*Model.ChatUser
+
+	r := db.DB.Model(&Model.ChatUser{}).Where("chat_id = ?", chatId).Find(&users)
+	
+	if r.RowsAffected == 0 || r.Error != nil {
+		return
+	}
+	for _, user := range users {
+		if user.UserID != userId {
+			db.ConnectRedisDB.Publish(context.TODO(), strconv.Itoa(int(user.UserID)) + "_notification", objectMessage)
+		}
+		db.ConnectRedisDB.Publish(context.TODO(), strconv.Itoa(int(user.UserID)) + "_messages", "true")
+	}
+}
+
+
+func CreateUnReaded(chatId int, messageId uint, userId int) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Error create unreaded message: ", r)
+		}
+	}()
+	
+	message := &Model.UnReadedMessage{
+		ChatID: chatId,
+		UserRelation: Model.UserRelation{
+			UserID: userId,
+		},
+		MessageID: messageId,
+	}
+	db.DB.Create(&message).Where("id = ?", message.ID)
 }

@@ -6,12 +6,36 @@ package chat;
 
 service ChatGreeter {
     rpc CreateChat(CreateRequestChat) returns (CreateResponseChat);
-    rpc GetChat(GetRequestChat) returns (GetResponseChat);
+    rpc StreamGetChat(Empty) returns (stream StreamGetResponseChat);
     rpc CreateSecondaryKey(CreateSecondaryKeyRequest) returns (CreateSecondaryKeyResponse);
     rpc GetSecondaryKey(GetSecondaryKeyRequest) returns (GetSecondaryKeyResponse);
     rpc GetPublicKey(GetPublicKeyRequest) returns (GetPublicKeyResponse);
     rpc AcceptChat(AcceptChatRequest) returns (AcceptChatResponse);
     rpc DissalowChat(DissalowChatRequest) returns (DissalowChatResponse);
+    rpc GetMessages(GetMessagesRequest) returns (GetMessagesResponse);
+    rpc StreamGetMessagesGeneral(Empty) returns (stream StreamGetMessagesGeneralResponse);
+    rpc StreamGetMessages(stream StreamGetMessagesRequest) returns (stream StreamGetMessagesResponse);
+    rpc GetUnSuccessChats(Empty) returns (GetUnSuccessChatsResponse);
+}
+
+enum TypeMessage {
+    SEND_MESSAGE = 0;
+    READ_MESSAGE = 1;
+}
+
+message StreamGetMessagesRequest {
+    TypeMessage type = 1;
+    string message = 2;
+}
+
+message StreamGetMessagesResponse {
+    Message message = 2;
+}
+
+message Empty {}
+
+message StreamGetMessagesGeneralResponse {
+    int32 count = 1;
 }
 
 message AcceptChatRequest {
@@ -45,11 +69,11 @@ message Keys {
     int64 g = 2;
 }
 
-message GetRequestChat {
-    bool submit_create = 1;
+message StreamGetResponseChat {
+    repeated ChatUsersCount chats = 1;
 }
 
-message GetResponseChat {
+message GetUnSuccessChatsResponse {
     repeated ChatUsers chats = 1;
 }
 
@@ -63,12 +87,24 @@ message ChatUsers {
     Chat chat = 7;
 }
 
+message ChatUsersCount  {
+    uint32 id = 1;
+    uint32 chat_id = 2;
+    uint32 user_id = 3;
+    User user = 4;
+    string created_at = 5;
+    string updated_at = 6;
+    Chat chat = 7;
+    int32 un_readed_messages_count = 8;
+    string text = 9;
+    string message_user_id = 10;
+}
+
 message Chat {
     uint32 id = 1;
     Message message = 2;
     string name_chat = 3;
     repeated ChatUsers chat_users = 4;
-    // repeated Message messages = 3;
 }
 
 message Message {
@@ -78,6 +114,7 @@ message Message {
     uint32 user_id = 4;
     uint32 chat_id = 5;
     string text = 6;
+    User user = 7;
 }
 
 message User {
@@ -111,4 +148,13 @@ message GetPublicKeyRequest {
 message GetPublicKeyResponse {
     int64 g = 1;
     string p = 2;
+}
+
+message GetMessagesRequest {
+    uint32 chatId = 1;
+    uint32 page = 2;
+}
+
+message GetMessagesResponse {
+    repeated Message messages = 1;
 }
