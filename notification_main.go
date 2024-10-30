@@ -1,12 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
-	db "mypackages/db"
+	notification_action "mypackages/actions/notification"
 	"mypackages/helpers"
-	"strconv"
 
 	"mypackages/proto/notification"
 
@@ -18,14 +16,13 @@ type notificationServer struct {
 	notification.UnimplementedNotificationGreeterServer
 }
 
-
 func (s *notificationServer) GetNotification(in *notification.Empty, responseStream notification.NotificationGreeter_GetNotificationServer) error {
 	ctx := responseStream.Context()
 	user, err := helpers.GetUserFormMd(ctx)
 	channel := make(chan map[string]any)
 
-	defer func(){
-		if r:=recover(); r != nil {
+	defer func() {
+		if r := recover(); r != nil {
 			fmt.Println("Error get notification: ", r)
 		}
 	}()
@@ -34,31 +31,13 @@ func (s *notificationServer) GetNotification(in *notification.Empty, responseStr
 		return status.Error(codes.Unauthenticated, "Пользователь не найден")
 	}
 
-	go func() {
-
-			key := strconv.Itoa(int(user.ID)) + "_notification"
-			res := db.ConnectRedisNotificationDB.Subscribe(ctx, key)
-
-			for {
-				var jsonDecodeMsg map[string]any
-				message, err := res.ReceiveMessage(ctx)
-				json.Unmarshal([]byte(message.Payload), &jsonDecodeMsg)
-
-				if err != nil {
-					log.Println("Can not create subscribe")
-					return
-				}
-			
-				channel<-jsonDecodeMsg
-			}
-
-	}()
+	go notification_action.NotificationSendToRedis(int(user.ID), ctx, &channel)
 
 	for {
-		val:=<-channel
+		val := <-channel
 
 		var options = make(map[string]string)
-		
+
 		if _, ok := val["options"]; ok {
 			for k, v := range val["options"].(map[string]any) {
 				options[k] = fmt.Sprintf("%v", v)
@@ -71,10 +50,10 @@ func (s *notificationServer) GetNotification(in *notification.Empty, responseStr
 
 		err := responseStream.Send(
 			&notification.NotificationMessage{
-				Type:          val["type"].(string),
+				Type:        val["type"].(string),
 				Description: val["description"].(string),
 				Title:       val["title"].(string),
-				Options: options,
+				Options:     options,
 			},
 		)
 		if err != nil {

@@ -78,7 +78,7 @@ func (s *chatServer) StreamGetMessages(stream chat.ChatGreeter_StreamGetMessages
 	ctx := stream.Context()
 	md, _ := metadata.FromIncomingContext(ctx)
 	user, err := helpers.GetUserFormMd(ctx)
-	channel := make(chan *chat.Message)
+	channel := make(chan *chat.StreamGetMessagesResponse)
 	if err!=nil {
 		return status.Error(codes.PermissionDenied, "пользователь не найден")
 	}
@@ -97,9 +97,7 @@ func (s *chatServer) StreamGetMessages(stream chat.ChatGreeter_StreamGetMessages
 			messageResponse := <-channel
 			for _, v := range s.Conns {
 				if v.ChatId == int(chatId) {
-					v.Stream.Send(&chat.StreamGetMessagesResponse{
-						Message:  messageResponse,
-					})
+					v.Stream.Send(messageResponse)
 				}
 			}
 		}
@@ -112,8 +110,8 @@ func (s *chatServer) StreamGetMessages(stream chat.ChatGreeter_StreamGetMessages
 		Stream: stream,
 	}
 
-	defer controllers.CloseConnect(s.Conns, jwtToken[1])
+	// defer controllers.CloseConnect(s.Conns, jwtToken[1])
 
-	return controllers.StreamGetMessages(stream, s.Conns, chatId, int(user.ID), &channel)
+	return controllers.StreamGetMessages(stream, s.Conns, chatId, int(user.ID), &channel, jwtToken[1])
 }
 

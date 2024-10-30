@@ -26,10 +26,12 @@ enum TypeMessage {
 message StreamGetMessagesRequest {
     TypeMessage type = 1;
     string message = 2;
+    uint32 message_id = 3;
 }
 
 message StreamGetMessagesResponse {
     Message message = 2;
+    TypeMessage type = 1;
 }
 
 message Empty {}
@@ -115,6 +117,8 @@ message Message {
     uint32 chat_id = 5;
     string text = 6;
     User user = 7;
+    bool status_read = 8;
+    bool un_readed_message = 9;
 }
 
 message User {

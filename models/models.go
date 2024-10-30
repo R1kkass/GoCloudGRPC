@@ -124,6 +124,8 @@ type Message struct {
 	ChatID   int    `json:"chat_id"`
 	Chat     *Chat  `json:"chat" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
 	Text     string `json:"text"`
+	UnReadedMessage *UnReadedMessage `json:"un_readed_message"`
+	StatusRead bool `json:"status_read"`
 }
 
 type Keys struct {
