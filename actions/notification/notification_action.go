@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-	"mypackages/db"
 	"strconv"
+
+	"github.com/R1kkass/GoCloudGRPC/db"
 )
 
 func NotificationSendToRedis(userId int, ctx context.Context, channel *chan map[string]any) {

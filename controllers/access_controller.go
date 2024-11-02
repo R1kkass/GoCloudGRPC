@@ -2,11 +2,12 @@ package controllers
 
 import (
 	"context"
-	"mypackages/consts"
-	"mypackages/db"
-	"mypackages/helpers"
-	Model "mypackages/models"
-	"mypackages/proto/access"
+
+	"github.com/R1kkass/GoCloudGRPC/consts"
+	"github.com/R1kkass/GoCloudGRPC/db"
+	"github.com/R1kkass/GoCloudGRPC/helpers"
+	Model "github.com/R1kkass/GoCloudGRPC/models"
+	"github.com/R1kkass/GoCloudGRPC/proto/access"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"

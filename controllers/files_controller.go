@@ -6,14 +6,15 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"mypackages/consts"
-	"mypackages/db"
-	"mypackages/helpers"
-	Model "mypackages/models"
-	"mypackages/policy"
-	"mypackages/proto/files"
 	"os"
 	"strconv"
+
+	"github.com/R1kkass/GoCloudGRPC/consts"
+	"github.com/R1kkass/GoCloudGRPC/db"
+	"github.com/R1kkass/GoCloudGRPC/helpers"
+	Model "github.com/R1kkass/GoCloudGRPC/models"
+	"github.com/R1kkass/GoCloudGRPC/policy"
+	"github.com/R1kkass/GoCloudGRPC/proto/files"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -21,18 +22,16 @@ import (
 	"gorm.io/gorm"
 )
 
-
-
 func DownloadFile(in *files.FileDownloadRequest, responseStream files.FilesGreeter_DownloadFileServer) error {
 	user, err := helpers.GetUserFormMd(responseStream.Context())
 
-    if err != nil {
-        fmt.Println(err)
-        return err
-    }
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
 
 	var fileData *Model.File
-	var result *gorm.DB;
+	var result *gorm.DB
 	if in.GetFolderId() == 0 {
 		result = db.DB.Model(&Model.File{}).Where(
 			"id = ? AND folder_id is NULL AND user_id = ?",
@@ -46,50 +45,50 @@ func DownloadFile(in *files.FileDownloadRequest, responseStream files.FilesGreet
 			user.ID).First(&fileData)
 	}
 
-	if result.RowsAffected == 0 && result.Error!=nil {
+	if result.RowsAffected == 0 && result.Error != nil {
 		return status.Error(codes.NotFound, "Файл не найден")
 	}
 
 	bufferSize := 256 * 1024
 	var path string = getFilePath(fileData)
 
-    file, err := os.Open(path)
-    if err != nil {
-        fmt.Println(err)
-        return err
-    }
-    
+	file, err := os.Open(path)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
 	stat, _ := os.Stat(path)
 	var fileSize = 0
-    defer file.Close()
+	defer file.Close()
 
-    buff := make([]byte, bufferSize)
-    for {
-        bytesRead, err := file.Read(buff)
-        if err != nil {
-            if err != io.EOF {
-                fmt.Println(err)
-            }
-            break
-        }
+	buff := make([]byte, bufferSize)
+	for {
+		bytesRead, err := file.Read(buff)
+		if err != nil {
+			if err != io.EOF {
+				fmt.Println(err)
+			}
+			break
+		}
 		fileSize += bufferSize
-        resp := &files.FileDownloadResponse{
-            Chunk: buff[:bytesRead],
+		resp := &files.FileDownloadResponse{
+			Chunk:    buff[:bytesRead],
 			FileName: fileData.FileName,
 			Progress: float32(fileSize) / float32(stat.Size()) * 100,
-        }
-        err = responseStream.Send(resp)
-        if err != nil {
-            log.Println("error while sending chunk:", err)
-            return err
-        }
-    }
-    return nil
+		}
+		err = responseStream.Send(resp)
+		if err != nil {
+			log.Println("error while sending chunk:", err)
+			return err
+		}
+	}
+	return nil
 }
 
-func UploadFile(stream files.FilesGreeter_UploadFileServer) error{
+func UploadFile(stream files.FilesGreeter_UploadFileServer) error {
 	user, err := helpers.GetUserFormMd(stream.Context())
-	
+
 	if err != nil {
 		return status.Error(codes.Internal, "Пользователь не найден")
 	}
@@ -99,7 +98,7 @@ func UploadFile(stream files.FilesGreeter_UploadFileServer) error{
 	var fileSize uint32 = 0
 	req, err := stream.Recv()
 
-	if err != nil || !policy.FolderPolicyID(req.GetFolderId(), user){
+	if err != nil || !policy.FolderPolicyID(req.GetFolderId(), user) {
 		return status.Error(codes.Internal, "Не удалось загрузить файл")
 	}
 
@@ -110,30 +109,30 @@ func UploadFile(stream files.FilesGreeter_UploadFileServer) error{
 	}
 	path := getUploadPath(user, filesNameHash, req.GetFolderId())
 	dst, _ := os.Create(path)
-	
+
 	err = writeInFile(req, dst, &fileSize, user, filesNameHash, file)
 
-	if err != nil{
+	if err != nil {
 		return status.Error(codes.PermissionDenied, err.Error())
 	}
 
-    for {
-        req, err := stream.Recv()
-        if err == io.EOF {
-            break
-        }
-        if err != nil {
-            return status.Error(codes.Internal, err.Error())
-        }
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return status.Error(codes.Internal, err.Error())
+		}
 
 		err = writeInFile(req, dst, &fileSize, user, filesNameHash, file)
-		
-		if err != nil{
+
+		if err != nil {
 			return status.Error(codes.PermissionDenied, err.Error())
 		}
 		db.DB.Model(&Model.File{}).Where("id=?", file.ID).Update("size", fileSize)
-    }
-	
+	}
+
 	defer func() {
 		if stream.Context().Err() != nil {
 			rollbackFile(user, filesNameHash, req.GetFolderId(), file.ID)
@@ -147,16 +146,16 @@ func UploadFile(stream files.FilesGreeter_UploadFileServer) error{
 	return stream.SendAndClose(&files.FileUploadResponse{Message: "Успешно загружено"})
 }
 
-func getFilePath(file *Model.File) string{
+func getFilePath(file *Model.File) string {
 	var pathFileFolder, _ = os.LookupEnv("PATH_FILES")
 
 	var path string
-	if file.FolderID==0{
-		path = pathFileFolder+strconv.Itoa(file.UserID)+"/"+file.FileNameHash;	
-	} else{
-		path = pathFileFolder+strconv.Itoa(file.UserID)+"/"+strconv.Itoa(file.FolderID)+"/"+file.FileNameHash;	
+	if file.FolderID == 0 {
+		path = pathFileFolder + strconv.Itoa(file.UserID) + "/" + file.FileNameHash
+	} else {
+		path = pathFileFolder + strconv.Itoa(file.UserID) + "/" + strconv.Itoa(file.FolderID) + "/" + file.FileNameHash
 	}
-	return path;
+	return path
 }
 
 func getUploadPath(user *Model.User, filesNameHash string, folderId uint32) string {
@@ -164,16 +163,16 @@ func getUploadPath(user *Model.User, filesNameHash string, folderId uint32) stri
 	var path string
 
 	if folderId != 0 {
-		path = pathFileFolder+strconv.Itoa(int(user.ID))+"/"+strconv.Itoa(int(folderId))+"/"+filesNameHash
-	} else{
-		path = pathFileFolder+strconv.Itoa(int(user.ID))+"/"+filesNameHash
+		path = pathFileFolder + strconv.Itoa(int(user.ID)) + "/" + strconv.Itoa(int(folderId)) + "/" + filesNameHash
+	} else {
+		path = pathFileFolder + strconv.Itoa(int(user.ID)) + "/" + filesNameHash
 	}
 	return path
 }
 
 func createFile(req *files.FileUploadRequest, user *Model.User, filesNameHash string) (*gorm.DB, *Model.File) {
 	var file *Model.File
-	if req.GetFolderId()!=0 {
+	if req.GetFolderId() != 0 {
 		file = &Model.File{
 			FileName: req.GetFileName(),
 			UserRelation: Model.UserRelation{
@@ -182,20 +181,20 @@ func createFile(req *files.FileUploadRequest, user *Model.User, filesNameHash st
 			FolderRelation: Model.FolderRelation{
 				FolderID: int(req.GetFolderId()),
 			},
-			Size: int(len(req.GetChunk())),
+			Size:         int(len(req.GetChunk())),
 			FileNameHash: filesNameHash,
-			AccessId: consts.CLOSE,
-		};
-	} else{
+			AccessId:     consts.CLOSE,
+		}
+	} else {
 		file = &Model.File{
-			FileName:  req.GetFileName(),
+			FileName: req.GetFileName(),
 			UserRelation: Model.UserRelation{
 				UserID: int(user.ID),
 			},
-			Size:  int(len(req.GetChunk())),
+			Size:         int(len(req.GetChunk())),
 			FileNameHash: filesNameHash,
-			AccessId: consts.CLOSE,
-		};
+			AccessId:     consts.CLOSE,
+		}
 	}
 
 	result := db.DB.Model(&Model.File{}).Create(&file)
@@ -210,9 +209,9 @@ func rollbackFile(user *Model.User, filesNameHash string, folderId uint32, fileI
 
 func writeInFile(req *files.FileUploadRequest, dst *os.File, fileSize *uint32, user *Model.User, filesNameHash string, file *Model.File) error {
 	chunk := req.GetChunk()
-	fmt.Println(uint32(len(chunk)/12))
+	fmt.Println(uint32(len(chunk) / 12))
 	dst.WriteAt(chunk, int64(*fileSize))
-		
+
 	*fileSize += uint32(len(chunk))
 
 	if !policy.SpacePolicy(uint32(len(chunk))) {
@@ -236,23 +235,23 @@ func FindFile(context context.Context, in *files.FindFileRequest) (*files.FindFi
 		return nil, status.Error(codes.Unauthenticated, "Пользователь не найден")
 	}
 
-	qFile:=db.DB.Model(&Model.File{}).Where("user_id = ?", user.ID)
-	qFolder:=db.DB.Model(&Model.Folder{}).Where("user_id = ?", user.ID)
-	
+	qFile := db.DB.Model(&Model.File{}).Where("user_id = ?", user.ID)
+	qFolder := db.DB.Model(&Model.Folder{}).Where("user_id = ?", user.ID)
+
 	if !in.GetFindEveryWhere() {
-		if (in.GetFolderId() == 0) {
+		if in.GetFolderId() == 0 {
 			qFile.Where("folder_id is NULL")
 			qFolder.Where("folder_id is NULL")
-		} else{
+		} else {
 			qFile.Where("folder_id = ?", in.GetFolderId())
 			qFolder.Where("folder_id = ?", in.GetFolderId())
 		}
 	}
-	qFile.Where("file_name LIKE ?", "%"+in.GetSearch()+"%").Limit(10).Offset((int(in.GetPage())-1)*10).Find(&file)
-	qFolder.Where("name_folder LIKE ?", "%"+in.GetSearch()+"%").Limit(10).Offset((int(in.GetPage())-1)*10).Find(&folder)
+	qFile.Where("file_name LIKE ?", "%"+in.GetSearch()+"%").Limit(10).Offset((int(in.GetPage()) - 1) * 10).Find(&file)
+	qFolder.Where("name_folder LIKE ?", "%"+in.GetSearch()+"%").Limit(10).Offset((int(in.GetPage()) - 1) * 10).Find(&folder)
 
 	return &files.FindFileResponse{
-		Files: file,
+		Files:   file,
 		Folders: folder,
 	}, nil
 }

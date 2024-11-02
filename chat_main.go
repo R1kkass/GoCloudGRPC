@@ -2,21 +2,21 @@ package main
 
 import (
 	"context"
-	"fmt"
-	chat_actions "mypackages/actions/chat"
-	"mypackages/controllers"
-	"mypackages/helpers"
-	"mypackages/proto/chat"
 	"strconv"
 	"strings"
 
-	// "google.golang.org/grpc"
+	chat_actions "github.com/R1kkass/GoCloudGRPC/actions/chat"
+	"github.com/R1kkass/GoCloudGRPC/controllers"
+	"github.com/R1kkass/GoCloudGRPC/helpers"
+	"github.com/R1kkass/GoCloudGRPC/proto/chat"
+	"github.com/R1kkass/GoCloudGRPC/structs"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
-type DataStreamConnect struct{
+type DataStreamConnect struct {
 	ChatId int
 	UserID uint
 	Stream chat.ChatGreeter_StreamGetMessagesServer
@@ -24,28 +24,22 @@ type DataStreamConnect struct{
 
 type chatServer struct {
 	chat.UnimplementedChatGreeterServer
-	Conns map[string]controllers.DataStreamConnect
+	Conns map[string]structs.DataStreamConnect
 }
-
-// func ChatServer() *chatServer {
-// 	return &chatServer{
-// 		Conns: make(map[int]grpc.BidiStreamingServer[chat.StreamGetMessagesRequest, chat.StreamGetMessagesResponse]),
-// 	}
-// }
 
 func (s *chatServer) CreateChat(ctx context.Context, in *chat.CreateRequestChat) (*chat.CreateResponseChat, error) {
 	return controllers.CreateChat(ctx, in)
 }
 
 func (s *chatServer) StreamGetChat(in *chat.Empty, requestStream chat.ChatGreeter_StreamGetChatServer) error {
-	return controllers.StreamGetChat(in,requestStream)
+	return controllers.StreamGetChat(in, requestStream)
 }
 
 func (s *chatServer) GetUnSuccessChats(ctx context.Context, in *chat.Empty) (*chat.GetUnSuccessChatsResponse, error) {
 	return controllers.GetUnSuccessChats(ctx, in)
 }
 
-func (s *chatServer) CreateSecondaryKey(ctx context.Context, in *chat.CreateSecondaryKeyRequest) (*chat.CreateSecondaryKeyResponse, error){
+func (s *chatServer) CreateSecondaryKey(ctx context.Context, in *chat.CreateSecondaryKeyRequest) (*chat.CreateSecondaryKeyResponse, error) {
 	return controllers.CreateSecondaryKey(ctx, in)
 }
 
@@ -69,31 +63,30 @@ func (s *chatServer) GetMessages(ctx context.Context, in *chat.GetMessagesReques
 	return controllers.GetMessages(ctx, in)
 }
 
-func (s *chatServer) StreamGetMessagesGeneral(in *chat.Empty, responseStream chat.ChatGreeter_StreamGetMessagesGeneralServer) error{
+func (s *chatServer) StreamGetMessagesGeneral(in *chat.Empty, responseStream chat.ChatGreeter_StreamGetMessagesGeneralServer) error {
 	return controllers.StreamGetMessagesGeneral(in, responseStream)
 }
 
 func (s *chatServer) StreamGetMessages(stream chat.ChatGreeter_StreamGetMessagesServer) error {
-	fmt.Println(s.Conns)
 	ctx := stream.Context()
 	md, _ := metadata.FromIncomingContext(ctx)
 	user, err := helpers.GetUserFormMd(ctx)
 	channel := make(chan *chat.StreamGetMessagesResponse)
-	if err!=nil {
+	if err != nil {
 		return status.Error(codes.PermissionDenied, "пользователь не найден")
 	}
-	chatId, err := strconv.Atoi( md["chat_id"][0]) 
+	chatId, err := strconv.Atoi(md["chat_id"][0])
 	if err != nil {
 		return status.Error(codes.PermissionDenied, "чат не найден ошибка")
 	}
 	err, chatUser := chat_actions.CheckChat(uint32(chatId), user.ID)
-	
+
 	if err != nil {
 		return status.Error(codes.PermissionDenied, "чат не найден ошибка")
 	}
 
-	go func ()  {
-		for{
+	go func() {
+		for {
 			messageResponse := <-channel
 			for _, v := range s.Conns {
 				if v.ChatId == int(chatId) {
@@ -104,14 +97,13 @@ func (s *chatServer) StreamGetMessages(stream chat.ChatGreeter_StreamGetMessages
 	}()
 	jwtToken, _ := md["authorization"]
 	jwtToken = strings.Split(jwtToken[0], " ")
-	s.Conns[jwtToken[1]] = controllers.DataStreamConnect{
-		ChatId:  chatUser.ChatID,
+	s.Conns[jwtToken[1]] = structs.DataStreamConnect{
+		ChatId: chatUser.ChatID,
 		UserID: user.ID,
 		Stream: stream,
 	}
 
-	// defer controllers.CloseConnect(s.Conns, jwtToken[1])
+	defer controllers.CloseConnect(s.Conns, jwtToken[1])
 
 	return controllers.StreamGetMessages(stream, s.Conns, chatId, int(user.ID), &channel, jwtToken[1])
 }
-

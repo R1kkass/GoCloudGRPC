@@ -4,21 +4,21 @@ import (
 	"log"
 	"net"
 
-	"mypackages/controllers"
-	db "mypackages/db"
-	"mypackages/interceptor"
-	access "mypackages/proto/access"
-	"mypackages/proto/auth"
-	"mypackages/proto/chat"
-	"mypackages/proto/files"
-	"mypackages/proto/keys"
-	"mypackages/proto/notification"
-	users "mypackages/proto/users"
+	db "github.com/R1kkass/GoCloudGRPC/db"
+	"github.com/R1kkass/GoCloudGRPC/interceptor"
+	access "github.com/R1kkass/GoCloudGRPC/proto/access"
+	"github.com/R1kkass/GoCloudGRPC/proto/auth"
+	"github.com/R1kkass/GoCloudGRPC/proto/chat"
+	"github.com/R1kkass/GoCloudGRPC/proto/files"
+	"github.com/R1kkass/GoCloudGRPC/proto/keys"
+	"github.com/R1kkass/GoCloudGRPC/proto/notification"
+	users "github.com/R1kkass/GoCloudGRPC/proto/users"
+	"github.com/R1kkass/GoCloudGRPC/structs"
 
 	"github.com/joho/godotenv"
 
 	"google.golang.org/grpc"
-	// "mypackages/tls"
+	// "github.com/R1kkass/GoCloudGRPC/tls"
 )
 
 type Message struct {
@@ -44,9 +44,9 @@ func main() {
 	}
 	// tlsCreds, err := tls.GenerateTLSCreds()
 	if err != nil {
-	   log.Fatal(err)
+		log.Fatal(err)
 	}
-	
+
 	s := grpc.NewServer(
 		// grpc.Creds(tlsCreds),
 		grpc.UnaryInterceptor(interceptor.CheckAuthInterceptor),
@@ -56,13 +56,13 @@ func main() {
 	users.RegisterUsersGreetServer(s, &usersServer{})
 	access.RegisterAccessGreeterServer(s, &accessServer{})
 	chat.RegisterChatGreeterServer(s, &chatServer{
-		Conns: make(map[string]controllers.DataStreamConnect),
+		Conns: make(map[string]structs.DataStreamConnect),
 	})
 	auth.RegisterAuthGreetServer(s, &authServer{})
 	keys.RegisterKeysGreeterServer(s, &keysServer{})
 	files.RegisterFilesGreeterServer(s, &filesServer{})
 	notification.RegisterNotificationGreeterServer(s, &notificationServer{})
-	
+
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}

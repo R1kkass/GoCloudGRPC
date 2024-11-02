@@ -2,8 +2,9 @@ package main
 
 import (
 	"context"
-	"mypackages/controllers"
-	"mypackages/proto/access"
+
+	"github.com/R1kkass/GoCloudGRPC/controllers"
+	"github.com/R1kkass/GoCloudGRPC/proto/access"
 )
 
 type accessServer struct {

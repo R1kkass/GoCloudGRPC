@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	chat_actions "mypackages/actions/chat"
-	"mypackages/db"
-	"mypackages/helpers"
-	Model "mypackages/models"
-	"mypackages/proto/chat"
 	"strconv"
+
+	chat_actions "github.com/R1kkass/GoCloudGRPC/actions/chat"
+	"github.com/R1kkass/GoCloudGRPC/db"
+	"github.com/R1kkass/GoCloudGRPC/helpers"
+	Model "github.com/R1kkass/GoCloudGRPC/models"
+	"github.com/R1kkass/GoCloudGRPC/proto/chat"
+	"github.com/R1kkass/GoCloudGRPC/structs"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -145,7 +147,7 @@ func StreamGetChat(in *chat.Empty, requestStream chat.ChatGreeter_StreamGetChatS
 	}()
 
 	db.DB.Model(&Model.ChatUser{}).Select(`chat_users.*, COALESCE(messages.created_at,'2022-10-19 15:23:53.252567+00') as create_at_message, count(un_readed_messages.id) as un_readed_messages_count`).
-		Joins("LEFT JOIN un_readed_messages ON un_readed_messages.chat_id = chat_users.chat_id AND un_readed_messages.user_id != ?", user.ID).
+		Joins("LEFT JOIN un_readed_messages ON un_readed_messages.chat_id = chat_users.chat_id AND un_readed_messages.user_id = ?", user.ID).
 		Joins("LEFT JOIN (SELECT * FROM (SELECT distinct on(chat_id) chat_id, created_at FROM messages ORDER BY chat_id, created_at DESC) t ORDER BY created_at DESC) AS messages ON messages.chat_id = chat_users.chat_id", user.ID).
 		Preload("User").Preload("Chat").Preload("Chat.ChatUsers.User").
 		Preload("Chat.Message", func(db *gorm.DB) *gorm.DB {
@@ -170,7 +172,7 @@ func StreamGetChat(in *chat.Empty, requestStream chat.ChatGreeter_StreamGetChatS
 		var chats []*chat.ChatUsersCount
 
 		db.DB.Model(&Model.ChatUser{}).Select(`chat_users.*, COALESCE(messages.created_at,'2022-10-19 15:23:53.252567+00') as create_at_message, count(un_readed_messages.id) as un_readed_messages_count`).
-			Joins("LEFT JOIN un_readed_messages ON un_readed_messages.chat_id = chat_users.chat_id AND un_readed_messages.user_id != ?", user.ID).
+			Joins("LEFT JOIN un_readed_messages ON un_readed_messages.chat_id = chat_users.chat_id AND un_readed_messages.user_id = ?", user.ID).
 			Joins("LEFT JOIN (SELECT * FROM (SELECT distinct on(chat_id) chat_id, created_at FROM messages ORDER BY chat_id, created_at DESC) t ORDER BY created_at DESC) AS messages ON messages.chat_id = chat_users.chat_id", user.ID).
 			Preload("User").Preload("Chat").Preload("Chat.ChatUsers.User").
 			Preload("Chat.Message", func(db *gorm.DB) *gorm.DB {
@@ -361,15 +363,27 @@ func GetMessages(ctx context.Context, in *chat.GetMessagesRequest) (*chat.GetMes
 	if err != nil {
 		return nil, status.Error(codes.PermissionDenied, "Пользователь не найден")
 	}
+	var page = int64(in.GetPage())
+	var count int64 = 0
+	count, err = chat_actions.GetCountNotReadedMessages(int(in.GetChatId()), int(user.ID))
 
-	// chat_actions.GetCountNotReadedMessages(chatUser.ChatID, int(user.ID))
+	if err != nil {
+		return nil, status.Error(codes.Unknown, "Не удалось получить сообщения")
+	}
+
+	if in.GetInit() {
+		page = count / 10
+		if page != 0 {
+			page += 1
+		}
+	}
 
 	r := db.DB.Model(&Model.Message{}).Preload("User").
 		Select("messages.*, SUM(CASE WHEN un_readed_messages.id IS NULL THEN 0 ELSE 1 END) AS un_readed_message").
 		Joins("LEFT JOIN un_readed_messages ON un_readed_messages.message_id = messages.id AND un_readed_messages.user_id = ?", user.ID).
 		Where("messages.chat_id = ?", in.GetChatId()).
 		Group("messages.id").
-		Order("id DESC").Offset(10 * int(in.GetPage())).
+		Order("id DESC").Offset(10 * int(page)).
 		Limit(10).
 		Find(&message)
 
@@ -378,7 +392,9 @@ func GetMessages(ctx context.Context, in *chat.GetMessagesRequest) (*chat.GetMes
 	}
 
 	return &chat.GetMessagesResponse{
-		Messages: message,
+		Messages:     message,
+		Page:         int32(page),
+		CountNotRead: int32(count),
 	}, nil
 }
 
@@ -399,10 +415,12 @@ func StreamGetMessagesGeneral(in *chat.Empty, responseStream chat.ChatGreeter_St
 
 	var count int64
 	r := db.DB.Model(&Model.UnReadedMessage{}).Where("user_id = ?", user.ID).Distinct("chat_id").Count(&count)
+
 	if r.Error != nil {
 		log.Println("error while sending count messages:", err)
 		return err
 	}
+
 	err = responseStream.Send(&chat.StreamGetMessagesGeneralResponse{
 		Count: int32(count),
 	})
@@ -433,24 +451,21 @@ func StreamGetMessagesGeneral(in *chat.Empty, responseStream chat.ChatGreeter_St
 	}
 }
 
-type DataStreamConnect struct {
-	ChatId int
-	UserID uint
-	Stream chat.ChatGreeter_StreamGetMessagesServer
-	Chan   chan *chat.Message
-}
-
-func StreamGetMessages(stream chat.ChatGreeter_StreamGetMessagesServer, conns map[string]DataStreamConnect, chatId int, userId int, channel *chan *chat.StreamGetMessagesResponse, token string) error {
+func StreamGetMessages(stream chat.ChatGreeter_StreamGetMessagesServer, conns map[string]structs.DataStreamConnect, chatId int, userId int, channel *chan *chat.StreamGetMessagesResponse, token string) error {
 
 	for {
 		msg, err := stream.Recv()
 
 		if err != nil {
-			// CloseConnect(conns, token)
+			CloseConnect(conns, token)
 			return status.Error(codes.Unknown, "неизвестная ошибка")
 		}
 		if msg.GetType() == chat.TypeMessage_SEND_MESSAGE {
 
+			if len(msg.GetMessage()) < 100 {
+				CloseConnect(conns, token)
+				return status.Error(codes.Unknown, "неизвестная ошибка")
+			}
 			var messageResponse *chat.Message
 
 			message := &Model.Message{
@@ -463,16 +478,15 @@ func StreamGetMessages(stream chat.ChatGreeter_StreamGetMessagesServer, conns ma
 
 			r := db.DB.Preload("User").
 				Create(&message).
-				Select("messages.*, true as un_readed_messages_id").
+				Select("messages.*, true as un_readed_message").
 				Where("messages.id = ?", message.ID).First(&messageResponse)
 
 			if r.Error != nil || r.RowsAffected == 0 {
-				// CloseConnect(conns, token)
+				CloseConnect(conns, token)
 				return status.Error(codes.Unknown, "неизвестная ошибка")
 			}
 
-			go chat_actions.NotificationMessageCreate(chatId, msg.GetMessage(), userId)
-			go chat_actions.CreateUnReaded(chatId, message.ID, userId)
+			go chat_actions.NotificationMessageCreate(chatId, msg.GetMessage(), userId, conns, message.ID)
 
 			*channel <- &chat.StreamGetMessagesResponse{
 				Message: messageResponse,
@@ -484,23 +498,34 @@ func StreamGetMessages(stream chat.ChatGreeter_StreamGetMessagesServer, conns ma
 			message, err := chat_actions.RemoveUnReadedMessage(int(msg.GetMessageId()), userId, chatId)
 
 			if err != nil {
-				// CloseConnect(conns, token)
+				CloseConnect(conns, token)
 				return status.Error(codes.Unknown, "неизвестная ошибка")
 			}
 
-			*channel <- &chat.StreamGetMessagesResponse{
-				Message: message,
-				Type:    msg.GetType(),
+			if message != nil {
+				*channel <- &chat.StreamGetMessagesResponse{
+					Message: message,
+					Type:    msg.GetType(),
+				}
+			}
+			var count int64
+			r := db.DB.Model(&Model.UnReadedMessage{}).Where("chat_id = ? AND user_id = ?", chatId, userId).Count(&count)
+
+			if r.Error == nil {
+				if count == 0 {
+					db.ConnectRedisDB.Publish(context.TODO(), strconv.Itoa(userId)+"_messages_general", "true")
+				}
 			}
 		}
 
 	}
 }
 
-func CloseConnect(conns map[string]DataStreamConnect, token string) {
-	if r := recover(); r != nil {
-		fmt.Println("Error close connection: ", r)
-	}
-	fmt.Print(token)
+func CloseConnect(conns map[string]structs.DataStreamConnect, token string) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Error close connection: ", r)
+		}
+	}()
 	delete(conns, token)
 }

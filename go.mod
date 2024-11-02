@@ -1,4 +1,4 @@
-module mypackages
+module github.com/R1kkass/GoCloudGRPC
 
 go 1.21
 

@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"mypackages/db"
-	"mypackages/helpers"
-	Model "mypackages/models"
-	"mypackages/proto/chat"
 	"strconv"
+
+	"github.com/R1kkass/GoCloudGRPC/db"
+	"github.com/R1kkass/GoCloudGRPC/helpers"
+	Model "github.com/R1kkass/GoCloudGRPC/models"
+	"github.com/R1kkass/GoCloudGRPC/proto/chat"
+	"github.com/R1kkass/GoCloudGRPC/structs"
 )
 
 func SendFirstParams(chat *Model.Chat) (string, int64) {
@@ -114,7 +116,13 @@ func NotificationChatCreate(userId int, objectMessage map[string]any) {
 	}
 }
 
-func NotificationMessageCreate(chatId int, message string, userId int) {
+func NotificationMessageCreate(chatId int, message string, userId int, conns map[string]structs.DataStreamConnect, messageId uint) {
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Error in NotificationMessageCreate: ", r)
+		}
+	}()
 
 	mapMessage := map[string]any{
 		"description": message,
@@ -124,55 +132,49 @@ func NotificationMessageCreate(chatId int, message string, userId int) {
 			"chat_id": strconv.Itoa(chatId),
 		},
 	}
-
-	objectMessage, _ := json.Marshal(mapMessage)
-
 	var users []*Model.ChatUser
 
 	r := db.DB.Model(&Model.ChatUser{}).Where("chat_id = ?", chatId).Find(&users)
 
-	if r.RowsAffected == 0 || r.Error != nil {
-		return
-	}
-	for _, user := range users {
-		if user.UserID != userId {
-			db.ConnectRedisDB.Publish(context.TODO(), strconv.Itoa(int(user.UserID))+"_notification", objectMessage)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Println("Error in NotificationMessageCreate: ", r)
+			}
+		}()
+	
+		var connectedUsers = make(map[int]bool)
+		for _, connectedUser := range conns {
+			connectedUsers[int(connectedUser.UserID)] = true
 		}
-		db.ConnectRedisDB.Publish(context.TODO(), strconv.Itoa(int(user.UserID))+"_messages", "true")
-	}
-}
+		objectMessage, _ := json.Marshal(mapMessage)
 
-func CreateUnReaded(chatId int, messageId uint, userId int) {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println("Error create unreaded message: ", r)
+		for _, user := range users {
+			_, ok := connectedUsers[user.UserID]
+			if user.UserID != userId && !ok {
+				db.ConnectRedisDB.Publish(context.TODO(), strconv.Itoa(int(user.UserID))+"_notification", objectMessage)
+			}
+			if user.UserID != userId {
+				message := &Model.UnReadedMessage{
+					ChatID: chatId,
+					UserRelation: Model.UserRelation{
+						UserID: user.UserID,
+					},
+					MessageID: messageId,
+				}
+				db.DB.Create(&message)
+				db.ConnectRedisDB.Publish(context.TODO(), strconv.Itoa(int(user.UserID))+"_messages", objectMessage)
+			}
 		}
 	}()
 
-	var chatUsers []*Model.ChatUser
-
-	r := db.DB.Model(&Model.ChatUser{}).Where("chat_id = ?", chatId).Find(&chatUsers)
-
 	if r.RowsAffected == 0 || r.Error != nil {
 		return
-	}
-
-	for _, chatUser := range chatUsers {
-		if userId != chatUser.UserID {
-			message := &Model.UnReadedMessage{
-				ChatID: chatId,
-				UserRelation: Model.UserRelation{
-					UserID: chatUser.UserID,
-				},
-				MessageID: messageId,
-			}
-			db.DB.Create(&message).Where("id = ?", message.ID)
-		}
 	}
 }
 
 func NotificationObserver(ctx context.Context, userId int, channel *chan bool) {
-	key := strconv.Itoa(userId) + "_notification"
+	key := strconv.Itoa(userId) + "_messages_general"
 	res := db.ConnectRedisNotificationDB.Subscribe(ctx, key)
 
 	for {
@@ -191,21 +193,47 @@ func RemoveUnReadedMessage(messageId int, userId int, chatId int) (*chat.Message
 	r := db.DB.Unscoped().Where("user_id = ? AND message_id = ? AND chat_id = ?", userId, messageId, chatId).Delete(&Model.UnReadedMessage{})
 
 	if r.Error != nil {
-		fmt.Println(r.Error)
-		// return nil, errors.New("не удалось изменить статус сообщения")
+		fmt.Println("error in RemoveUnReadedMessage: ", r.Error)
+		return nil, errors.New("не удалось изменить статус сообщения")
 	}
+	go db.ConnectRedisDB.Publish(context.TODO(), strconv.Itoa(int(userId))+"_messages", "true")
 
 	var message *chat.Message
 
-	r = db.DB.Model(&Model.Message{}).Where("messages.id = ? AND messages.chat_id = ?", messageId, chatId).Update("status_read", true).
+	r = db.DB.Model(&Model.Message{}).Where("messages.id = ? AND messages.chat_id = ? AND messages.user_id != ?", messageId, chatId, userId).
 		Select("messages.*, SUM(CASE WHEN un_readed_messages.id IS NULL THEN 0 ELSE 1 END) AS un_readed_message").
+		Preload("User").
 		Joins("LEFT JOIN un_readed_messages ON un_readed_messages.message_id = messages.id AND un_readed_messages.user_id = ?", userId).
 		Group("messages.id").
 		First(&message)
 
+	if r.Error != nil || r.RowsAffected == 0 {
+		fmt.Println("error in RemoveUnReadedMessage: ", r.Error)
+		return nil, errors.New("не удалось изменить статус сообщения")
+	}
+
+	if !message.StatusRead {
+		r = db.DB.Model(&Model.Message{}).Where("id = ?", message.Id).Update("status_read", true)
+		message.StatusRead = true
+	} else {
+		return nil, nil
+	}
+
 	if r.Error != nil {
+		fmt.Println("error in RemoveUnReadedMessage: ", r.Error)
 		return nil, errors.New("не удалось изменить статус сообщения")
 	}
 
 	return message, nil
+}
+
+func GetCountNotReadedMessages(chatId int, userId int) (int64, error) {
+	var count int64
+	r := db.DB.Model(&Model.UnReadedMessage{}).Where("chat_id = ? AND user_id = ?", chatId, userId).Count(&count)
+
+	if r.Error != nil || r.RowsAffected == 0 {
+		return 0, r.Error
+	}
+
+	return count, nil
 }

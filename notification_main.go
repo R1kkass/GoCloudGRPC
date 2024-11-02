@@ -3,10 +3,11 @@ package main
 import (
 	"fmt"
 	"log"
-	notification_action "mypackages/actions/notification"
-	"mypackages/helpers"
 
-	"mypackages/proto/notification"
+	notification_action "github.com/R1kkass/GoCloudGRPC/actions/notification"
+	"github.com/R1kkass/GoCloudGRPC/helpers"
+
+	"github.com/R1kkass/GoCloudGRPC/proto/notification"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

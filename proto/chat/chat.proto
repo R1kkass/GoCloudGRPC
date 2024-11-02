@@ -157,8 +157,11 @@ message GetPublicKeyResponse {
 message GetMessagesRequest {
     uint32 chatId = 1;
     uint32 page = 2;
+    bool init = 3;
 }
 
 message GetMessagesResponse {
     repeated Message messages = 1;
+    int32 page = 2; 
+    int32 count_not_read = 3; 
 }

@@ -3,14 +3,15 @@ package helpers
 import (
 	"context"
 	"errors"
-	"mypackages/db"
-	Model "mypackages/models"
+
+	"github.com/R1kkass/GoCloudGRPC/db"
+	Model "github.com/R1kkass/GoCloudGRPC/models"
 )
 
 func CheckChat(ctx context.Context, chatId uint32) error {
 	user, err := GetUserFormMd(ctx)
 
-	if err!=nil {
+	if err != nil {
 		return err
 	}
 

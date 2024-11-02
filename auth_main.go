@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
-	"mypackages/controllers"
-	"mypackages/proto/auth"
+
+	"github.com/R1kkass/GoCloudGRPC/controllers"
+	"github.com/R1kkass/GoCloudGRPC/proto/auth"
 )
 
-type authServer struct{
+type authServer struct {
 	auth.UnimplementedAuthGreetServer
 }
 

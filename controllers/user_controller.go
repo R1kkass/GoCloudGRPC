@@ -2,20 +2,21 @@ package controllers
 
 import (
 	"context"
-	"mypackages/consts"
-	"mypackages/db"
-	"mypackages/helpers"
-	Model "mypackages/models"
-	"mypackages/proto/users"
 	"strconv"
+
+	"github.com/R1kkass/GoCloudGRPC/consts"
+	"github.com/R1kkass/GoCloudGRPC/db"
+	"github.com/R1kkass/GoCloudGRPC/helpers"
+	Model "github.com/R1kkass/GoCloudGRPC/models"
+	"github.com/R1kkass/GoCloudGRPC/proto/users"
 )
 
 func GetUsers(ctx context.Context, in *users.GetUsersRequest) (*users.GetUsersResponse, error) {
 	var usersList []Model.User
 	user, _ := helpers.GetUserFormMd(ctx)
 
-	db.DB.Model(&Model.User{}).Where("id != " + strconv.Itoa(int(user.ID)) +" AND (name LIKE name '%"+in.GetUserName()+"%' OR email LIKE '%"+in.GetUserName()+"%')").Find(&usersList)
-	
+	db.DB.Model(&Model.User{}).Where("id != " + strconv.Itoa(int(user.ID)) + " AND (name LIKE name '%" + in.GetUserName() + "%' OR email LIKE '%" + in.GetUserName() + "%')").Find(&usersList)
+
 	var usersResponse []*users.Users
 
 	for i := 0; i < len(usersList); i++ {
@@ -33,7 +34,7 @@ func GetContentUser(ctx context.Context, in *users.GetContentUserRequest) (*user
 	var contentFoldersRequestAccessChan = make(chan []*users.Folder, 1)
 	var contentFileRequestAccessChan = make(chan []*users.File, 1)
 
-	go func (){
+	go func() {
 		var contentFiles []*users.File
 		db.DB.Model(&Model.File{}).Where("user_id = ? AND access_id = ?", in.GetId(), consts.OPEN).Find(&contentFiles)
 		contentFilesChan <- contentFiles
@@ -43,7 +44,7 @@ func GetContentUser(ctx context.Context, in *users.GetContentUserRequest) (*user
 		db.DB.Model(&Model.Folder{}).Where("user_id = ? AND access_id = ?", in.GetId(), consts.OPEN).Find(&contentFolders)
 		contentFoldersChan <- contentFolders
 	}()
-	go func(){
+	go func() {
 		var contentFoldersRequestAccess []*users.Folder
 		db.DB.Model(&Model.Folder{}).Where("user_id = ? AND access_id = ?", in.GetId(), consts.WITH_PERMISSION).Find(&contentFoldersRequestAccess)
 		contentFoldersRequestAccessChan <- contentFoldersRequestAccess
@@ -56,10 +57,10 @@ func GetContentUser(ctx context.Context, in *users.GetContentUserRequest) (*user
 
 	return &users.GetContentUserResponse{
 		Data: &users.Content{
-			Files:               <- contentFilesChan,
-			Folder:              <- contentFoldersChan,
-			FolderRequestAccess: <- contentFoldersRequestAccessChan,
-			FileRequestAccess:   <- contentFileRequestAccessChan,
+			Files:               <-contentFilesChan,
+			Folder:              <-contentFoldersChan,
+			FolderRequestAccess: <-contentFoldersRequestAccessChan,
+			FileRequestAccess:   <-contentFileRequestAccessChan,
 		},
 	}, nil
 }

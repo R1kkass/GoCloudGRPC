@@ -2,8 +2,9 @@ package main
 
 import (
 	"context"
-	"mypackages/controllers"
-	"mypackages/proto/files"
+
+	"github.com/R1kkass/GoCloudGRPC/controllers"
+	"github.com/R1kkass/GoCloudGRPC/proto/files"
 )
 
 type filesServer struct {

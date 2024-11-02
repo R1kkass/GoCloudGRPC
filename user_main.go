@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"mypackages/controllers"
-	users "mypackages/proto/users"
-)
 
+	"github.com/R1kkass/GoCloudGRPC/controllers"
+	users "github.com/R1kkass/GoCloudGRPC/proto/users"
+)
 
 type usersServer struct {
 	users.UnimplementedUsersGreetServer
