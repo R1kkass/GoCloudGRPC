@@ -16,6 +16,8 @@ service ChatGreeter {
     rpc StreamGetMessagesGeneral(Empty) returns (stream StreamGetMessagesGeneralResponse);
     rpc StreamGetMessages(stream StreamGetMessagesRequest) returns (stream StreamGetMessagesResponse);
     rpc GetUnSuccessChats(Empty) returns (GetUnSuccessChatsResponse);
+    rpc UploadChatFile(stream UploadFileChat) returns (Empty);
+    rpc DownloadChatFile(DownloadFileChatRequest) returns (stream DownloadFileChatResponse);
 }
 
 enum TypeMessage {
@@ -164,4 +166,18 @@ message GetMessagesResponse {
     repeated Message messages = 1;
     int32 page = 2; 
     int32 count_not_read = 3; 
+}
+
+message UploadFileChat {
+    bytes chunk = 1;
+    string fileName = 2;
+    uint32 chatId = 3;
+}
+
+message DownloadFileChatResponse {
+    bytes chunk = 1;
+}
+
+message DownloadFileChatRequest {
+    uint32 chat_file_id = 1;
 }

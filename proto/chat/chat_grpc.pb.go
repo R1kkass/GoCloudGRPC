@@ -33,6 +33,8 @@ type ChatGreeterClient interface {
 	StreamGetMessagesGeneral(ctx context.Context, in *Empty, opts ...grpc.CallOption) (ChatGreeter_StreamGetMessagesGeneralClient, error)
 	StreamGetMessages(ctx context.Context, opts ...grpc.CallOption) (ChatGreeter_StreamGetMessagesClient, error)
 	GetUnSuccessChats(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*GetUnSuccessChatsResponse, error)
+	UploadChatFile(ctx context.Context, opts ...grpc.CallOption) (ChatGreeter_UploadChatFileClient, error)
+	DownloadChatFile(ctx context.Context, in *DownloadFileChatRequest, opts ...grpc.CallOption) (ChatGreeter_DownloadChatFileClient, error)
 }
 
 type chatGreeterClient struct {
@@ -210,6 +212,72 @@ func (c *chatGreeterClient) GetUnSuccessChats(ctx context.Context, in *Empty, op
 	return out, nil
 }
 
+func (c *chatGreeterClient) UploadChatFile(ctx context.Context, opts ...grpc.CallOption) (ChatGreeter_UploadChatFileClient, error) {
+	stream, err := c.cc.NewStream(ctx, &ChatGreeter_ServiceDesc.Streams[3], "/chat.ChatGreeter/UploadChatFile", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &chatGreeterUploadChatFileClient{stream}
+	return x, nil
+}
+
+type ChatGreeter_UploadChatFileClient interface {
+	Send(*UploadFileChat) error
+	CloseAndRecv() (*Empty, error)
+	grpc.ClientStream
+}
+
+type chatGreeterUploadChatFileClient struct {
+	grpc.ClientStream
+}
+
+func (x *chatGreeterUploadChatFileClient) Send(m *UploadFileChat) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *chatGreeterUploadChatFileClient) CloseAndRecv() (*Empty, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(Empty)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *chatGreeterClient) DownloadChatFile(ctx context.Context, in *DownloadFileChatRequest, opts ...grpc.CallOption) (ChatGreeter_DownloadChatFileClient, error) {
+	stream, err := c.cc.NewStream(ctx, &ChatGreeter_ServiceDesc.Streams[4], "/chat.ChatGreeter/DownloadChatFile", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &chatGreeterDownloadChatFileClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type ChatGreeter_DownloadChatFileClient interface {
+	Recv() (*DownloadFileChatResponse, error)
+	grpc.ClientStream
+}
+
+type chatGreeterDownloadChatFileClient struct {
+	grpc.ClientStream
+}
+
+func (x *chatGreeterDownloadChatFileClient) Recv() (*DownloadFileChatResponse, error) {
+	m := new(DownloadFileChatResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // ChatGreeterServer is the server API for ChatGreeter service.
 // All implementations must embed UnimplementedChatGreeterServer
 // for forward compatibility
@@ -225,6 +293,8 @@ type ChatGreeterServer interface {
 	StreamGetMessagesGeneral(*Empty, ChatGreeter_StreamGetMessagesGeneralServer) error
 	StreamGetMessages(ChatGreeter_StreamGetMessagesServer) error
 	GetUnSuccessChats(context.Context, *Empty) (*GetUnSuccessChatsResponse, error)
+	UploadChatFile(ChatGreeter_UploadChatFileServer) error
+	DownloadChatFile(*DownloadFileChatRequest, ChatGreeter_DownloadChatFileServer) error
 	mustEmbedUnimplementedChatGreeterServer()
 }
 
@@ -264,6 +334,12 @@ func (UnimplementedChatGreeterServer) StreamGetMessages(ChatGreeter_StreamGetMes
 }
 func (UnimplementedChatGreeterServer) GetUnSuccessChats(context.Context, *Empty) (*GetUnSuccessChatsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetUnSuccessChats not implemented")
+}
+func (UnimplementedChatGreeterServer) UploadChatFile(ChatGreeter_UploadChatFileServer) error {
+	return status.Errorf(codes.Unimplemented, "method UploadChatFile not implemented")
+}
+func (UnimplementedChatGreeterServer) DownloadChatFile(*DownloadFileChatRequest, ChatGreeter_DownloadChatFileServer) error {
+	return status.Errorf(codes.Unimplemented, "method DownloadChatFile not implemented")
 }
 func (UnimplementedChatGreeterServer) mustEmbedUnimplementedChatGreeterServer() {}
 
@@ -490,6 +566,53 @@ func _ChatGreeter_GetUnSuccessChats_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatGreeter_UploadChatFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ChatGreeterServer).UploadChatFile(&chatGreeterUploadChatFileServer{stream})
+}
+
+type ChatGreeter_UploadChatFileServer interface {
+	SendAndClose(*Empty) error
+	Recv() (*UploadFileChat, error)
+	grpc.ServerStream
+}
+
+type chatGreeterUploadChatFileServer struct {
+	grpc.ServerStream
+}
+
+func (x *chatGreeterUploadChatFileServer) SendAndClose(m *Empty) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *chatGreeterUploadChatFileServer) Recv() (*UploadFileChat, error) {
+	m := new(UploadFileChat)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _ChatGreeter_DownloadChatFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(DownloadFileChatRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ChatGreeterServer).DownloadChatFile(m, &chatGreeterDownloadChatFileServer{stream})
+}
+
+type ChatGreeter_DownloadChatFileServer interface {
+	Send(*DownloadFileChatResponse) error
+	grpc.ServerStream
+}
+
+type chatGreeterDownloadChatFileServer struct {
+	grpc.ServerStream
+}
+
+func (x *chatGreeterDownloadChatFileServer) Send(m *DownloadFileChatResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // ChatGreeter_ServiceDesc is the grpc.ServiceDesc for ChatGreeter service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -546,6 +669,16 @@ var ChatGreeter_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _ChatGreeter_StreamGetMessages_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "UploadChatFile",
+			Handler:       _ChatGreeter_UploadChatFile_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "DownloadChatFile",
+			Handler:       _ChatGreeter_DownloadChatFile_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "chat/chat.proto",

@@ -14,6 +14,7 @@ import (
 	"github.com/R1kkass/GoCloudGRPC/helpers"
 	Model "github.com/R1kkass/GoCloudGRPC/models"
 	"github.com/R1kkass/GoCloudGRPC/proto/auth"
+	"github.com/R1kkass/GoCloudGRPC/validate"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"
@@ -26,9 +27,36 @@ type KeyUser struct {
 	b *big.Int
 }
 
+type AuthServer struct {
+	auth.UnimplementedAuthGreetServer
+}
+
 var keysUser = make(map[string]KeyUser)
 
-func Login(ctx context.Context, in *auth.LoginRequest) (*auth.LoginResponse, error) {
+func (s *AuthServer) Login(ctx context.Context, in *auth.LoginRequest) (*auth.LoginResponse, error) {
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Error Login: ", r)
+		}
+	}()
+
+	err := validate.Valid(
+		validate.ValidType{
+			"email": validate.ValidateStruct{
+				Rule:  "required",
+				Value: in.GetEmail(),
+			},
+			"password": validate.ValidateStruct{
+				Rule:  "required",
+				Value: in.GetPassword(),
+			},
+		},
+	)
+
+	if err != nil{
+		return nil, status.Error(codes.Unknown, "Неизвестная ошибка")
+	}
 
 	var user *Model.User
 	per, _ := peer.FromContext(ctx)
@@ -68,13 +96,33 @@ func Login(ctx context.Context, in *auth.LoginRequest) (*auth.LoginResponse, err
 	}, nil
 }
 
-func Registration(ctx context.Context, in *auth.RegistrationRequest) (*auth.RegistrationResponse, error) {
-
+func (s *AuthServer) Registration(ctx context.Context, in *auth.RegistrationRequest) (*auth.RegistrationResponse, error) {
 	defer func() {
-		if recover() != nil {
-			fmt.Println("Error registration: ", recover())
+		if r := recover(); r != nil {
+			fmt.Println("Error Registration: ", r)
 		}
 	}()
+
+	err := validate.Valid(
+		validate.ValidType{
+			"email": validate.ValidateStruct{
+				Rule:  "required",
+				Value: in.GetEmail(),
+			},
+			"password": validate.ValidateStruct{
+				Rule:  "required",
+				Value: in.GetPassword(),
+			},
+			"name": validate.ValidateStruct{
+				Rule:  "required|min:2",
+				Value: in.GetName(),
+			},
+		},
+	)
+
+	if err != nil{
+		return nil, status.Error(codes.Unknown, "Неизвестная ошибка")
+	}
 
 	var user *Model.User
 	p, _ := peer.FromContext(ctx)
@@ -132,7 +180,13 @@ func Registration(ctx context.Context, in *auth.RegistrationRequest) (*auth.Regi
 	}, nil
 }
 
-func DHConnect(ctx context.Context, in *auth.DHConnectRequest) (*auth.DHConnectResponse, error) {
+func (s *AuthServer) DHConnect(ctx context.Context, in *auth.DHConnectRequest) (*auth.DHConnectResponse, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Error DHConnect: ", r)
+		}
+	}()
+	
 	per, _ := peer.FromContext(ctx)
 	ip := per.Addr.String()
 
@@ -159,7 +213,13 @@ func DHConnect(ctx context.Context, in *auth.DHConnectRequest) (*auth.DHConnectR
 	return &auth.DHConnectResponse{P: p.String(), G: g, B: B.String()}, nil
 }
 
-func DHSecondConnect(ctx context.Context, in *auth.DHSecondConnectRequest) (*auth.DHSecondConnectResponse, error) {
+func (s *AuthServer) DHSecondConnect(ctx context.Context, in *auth.DHSecondConnectRequest) (*auth.DHSecondConnectResponse, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Error DHSecondConnect: ", r)
+		}
+	}()
+	
 	p, _ := peer.FromContext(ctx)
 	ip := p.Addr.String()
 
@@ -189,4 +249,8 @@ func DHSecondConnect(ctx context.Context, in *auth.DHSecondConnectRequest) (*aut
 	return &auth.DHSecondConnectResponse{
 		Message: "Ключ успешно создан",
 	}, nil
+}
+
+func (s *AuthServer) CheckAuth(ctx context.Context, in *auth.Empty) (*auth.Empty, error) {
+	return &auth.Empty{}, nil
 }

@@ -1,4 +1,4 @@
-package main
+package controllers
 
 import (
 	"context"
@@ -15,11 +15,11 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type keysServer struct {
+type KeysServer struct {
 	keys.UnimplementedKeysGreeterServer
 }
 
-func (s *keysServer) UploadKeys(ctx context.Context, in *keys.FileUploadRequest) (*keys.FileUploadResponse, error) {
+func (s *KeysServer) UploadKeys(ctx context.Context, in *keys.FileUploadRequest) (*keys.FileUploadResponse, error) {
 	user, err := helpers.GetUserFormMd(ctx)
 
 	if err != nil {
@@ -47,7 +47,7 @@ func (s *keysServer) UploadKeys(ctx context.Context, in *keys.FileUploadRequest)
 	}, nil
 }
 
-func (s *keysServer) DownloadKeys(in *keys.Empty, responseStream keys.KeysGreeter_DownloadKeysServer) error {
+func (s *KeysServer) DownloadKeys(in *keys.Empty, responseStream keys.KeysGreeter_DownloadKeysServer) error {
 	user, err := helpers.GetUserFormMd(responseStream.Context())
 	fmt.Println("pathKeysFolder")
 

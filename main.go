@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 
+	"github.com/R1kkass/GoCloudGRPC/controllers"
 	db "github.com/R1kkass/GoCloudGRPC/db"
 	"github.com/R1kkass/GoCloudGRPC/interceptor"
 	access "github.com/R1kkass/GoCloudGRPC/proto/access"
@@ -33,9 +34,12 @@ func init() {
 }
 
 func main() {
+
 	db.ConnectDatabase()
 	db.ConnectRedis()
 	db.ConnectRedisNotification()
+	db.AwsConnect()
+	db.Migration()
 
 	lis, err := net.Listen("tcp", ":50051")
 
@@ -50,20 +54,23 @@ func main() {
 	s := grpc.NewServer(
 		// grpc.Creds(tlsCreds),
 		grpc.UnaryInterceptor(interceptor.CheckAuthInterceptor),
-		// grpc.StreamInterceptor(interceptor.CheckAuthInterceptorStream),
+		grpc.StreamInterceptor(interceptor.CheckAuthInterceptorStream),
+		grpc.MaxSendMsgSize(1e+7),
+		grpc.MaxRecvMsgSize(1e+7),
 	)
 
-	users.RegisterUsersGreetServer(s, &usersServer{})
-	access.RegisterAccessGreeterServer(s, &accessServer{})
-	chat.RegisterChatGreeterServer(s, &chatServer{
+	users.RegisterUsersGreetServer(s, &controllers.UsersServer{})
+	access.RegisterAccessGreeterServer(s, &controllers.AccessServer{})
+	chat.RegisterChatGreeterServer(s, &controllers.ChatServer{
 		Conns: make(map[string]structs.DataStreamConnect),
 	})
-	auth.RegisterAuthGreetServer(s, &authServer{})
-	keys.RegisterKeysGreeterServer(s, &keysServer{})
-	files.RegisterFilesGreeterServer(s, &filesServer{})
-	notification.RegisterNotificationGreeterServer(s, &notificationServer{})
+	auth.RegisterAuthGreetServer(s, &controllers.AuthServer{})
+	keys.RegisterKeysGreeterServer(s, &controllers.KeysServer{})
+	files.RegisterFilesGreeterServer(s, &controllers.FilesServer{})
+	notification.RegisterNotificationGreeterServer(s, &controllers.NotificationServer{})
 
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
+
 }

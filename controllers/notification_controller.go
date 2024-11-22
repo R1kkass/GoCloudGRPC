@@ -1,4 +1,4 @@
-package main
+package controllers
 
 import (
 	"fmt"
@@ -13,11 +13,11 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type notificationServer struct {
+type NotificationServer struct {
 	notification.UnimplementedNotificationGreeterServer
 }
 
-func (s *notificationServer) GetNotification(in *notification.Empty, responseStream notification.NotificationGreeter_GetNotificationServer) error {
+func (s *NotificationServer) GetNotification(in *notification.Empty, responseStream notification.NotificationGreeter_GetNotificationServer) error {
 	ctx := responseStream.Context()
 	user, err := helpers.GetUserFormMd(ctx)
 	channel := make(chan map[string]any)

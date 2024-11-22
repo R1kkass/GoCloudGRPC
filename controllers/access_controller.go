@@ -18,7 +18,7 @@ type AccessServer struct {
 	access.UnimplementedAccessGreeterServer
 }
 
-func CreateAccess(ctx context.Context, in *access.RequestAccess) (*access.ResponseAccess, error) {
+func (s *AccessServer) CreateAccess(ctx context.Context, in *access.RequestAccess) (*access.ResponseAccess, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	var file Model.File
@@ -44,10 +44,10 @@ func CreateAccess(ctx context.Context, in *access.RequestAccess) (*access.Respon
 			UserID:        int(in.GetUserId()),
 			CurrentUserID: int(user.ID),
 			FolderRelation: Model.FolderRelation{
-				FolderID: int(in.GetFolderId()),
+				FolderID: uint(in.GetFolderId()),
 			},
 			FileRelation: Model.FileRelation{
-				FileID: int(in.GetFileId()),
+				FileID: uint(in.GetFileId()),
 			},
 			StatusID: consts.EXPECTATION,
 		})
@@ -60,7 +60,7 @@ func CreateAccess(ctx context.Context, in *access.RequestAccess) (*access.Respon
 	}, nil
 }
 
-func GetAccesses(ctx context.Context, in *access.Empty) (*access.GetAccessesResponse, error) {
+func (s *AccessServer) GetAccesses(ctx context.Context, in *access.Empty) (*access.GetAccessesResponse, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	var request_access []*access.RequestAccessData
@@ -78,7 +78,7 @@ func GetAccesses(ctx context.Context, in *access.Empty) (*access.GetAccessesResp
 	}, nil
 }
 
-func ChangeAccess(ctx context.Context, in *access.ChangeAccessRequest) (*access.ChangeAccessResponse, error) {
+func (s *AccessServer) ChangeAccess(ctx context.Context, in *access.ChangeAccessRequest) (*access.ChangeAccessResponse, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	jwtToken, _ := md["authorization"]

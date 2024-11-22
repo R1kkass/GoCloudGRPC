@@ -2,14 +2,12 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"strconv"
 
-	"github.com/R1kkass/GoCloudGRPC/consts"
+	files_actions "github.com/R1kkass/GoCloudGRPC/actions/files"
 	"github.com/R1kkass/GoCloudGRPC/db"
 	"github.com/R1kkass/GoCloudGRPC/helpers"
 	Model "github.com/R1kkass/GoCloudGRPC/models"
@@ -22,7 +20,11 @@ import (
 	"gorm.io/gorm"
 )
 
-func DownloadFile(in *files.FileDownloadRequest, responseStream files.FilesGreeter_DownloadFileServer) error {
+type FilesServer struct {
+	*files.UnimplementedFilesGreeterServer
+}
+
+func (s *FilesServer) DownloadFile(in *files.FileDownloadRequest, responseStream files.FilesGreeter_DownloadFileServer) error {
 	user, err := helpers.GetUserFormMd(responseStream.Context())
 
 	if err != nil {
@@ -50,7 +52,7 @@ func DownloadFile(in *files.FileDownloadRequest, responseStream files.FilesGreet
 	}
 
 	bufferSize := 256 * 1024
-	var path string = getFilePath(fileData)
+	var path string = files_actions.GetFilePath(fileData)
 
 	file, err := os.Open(path)
 	if err != nil {
@@ -86,7 +88,7 @@ func DownloadFile(in *files.FileDownloadRequest, responseStream files.FilesGreet
 	return nil
 }
 
-func UploadFile(stream files.FilesGreeter_UploadFileServer) error {
+func (s *FilesServer) UploadFile(stream files.FilesGreeter_UploadFileServer) error {
 	user, err := helpers.GetUserFormMd(stream.Context())
 
 	if err != nil {
@@ -102,15 +104,15 @@ func UploadFile(stream files.FilesGreeter_UploadFileServer) error {
 		return status.Error(codes.Internal, "Не удалось загрузить файл")
 	}
 
-	result, file := createFile(req, user, filesNameHash)
+	result, file := files_actions.CreateFile(req, user, filesNameHash)
 
 	if result.RowsAffected == 0 || result.Error != nil {
 		return status.Error(codes.Internal, "Не удалось создать файл")
 	}
-	path := getUploadPath(user, filesNameHash, req.GetFolderId())
+	path := files_actions.GetUploadPath(user, filesNameHash, req.GetFolderId())
 	dst, _ := os.Create(path)
 
-	err = writeInFile(req, dst, &fileSize, user, filesNameHash, file)
+	err = files_actions.WriteInFile(req, dst, &fileSize, user, filesNameHash, file)
 
 	if err != nil {
 		return status.Error(codes.PermissionDenied, err.Error())
@@ -125,7 +127,7 @@ func UploadFile(stream files.FilesGreeter_UploadFileServer) error {
 			return status.Error(codes.Internal, err.Error())
 		}
 
-		err = writeInFile(req, dst, &fileSize, user, filesNameHash, file)
+		err = files_actions.WriteInFile(req, dst, &fileSize, user, filesNameHash, file)
 
 		if err != nil {
 			return status.Error(codes.PermissionDenied, err.Error())
@@ -135,98 +137,18 @@ func UploadFile(stream files.FilesGreeter_UploadFileServer) error {
 
 	defer func() {
 		if stream.Context().Err() != nil {
-			rollbackFile(user, filesNameHash, req.GetFolderId(), file.ID)
+			files_actions.RollbackFile(user, filesNameHash, req.GetFolderId(), file.ID)
 		}
 
 		if recover() != nil {
-			rollbackFile(user, filesNameHash, req.GetFolderId(), file.ID)
+			files_actions.RollbackFile(user, filesNameHash, req.GetFolderId(), file.ID)
 		}
 	}()
 
 	return stream.SendAndClose(&files.FileUploadResponse{Message: "Успешно загружено"})
 }
 
-func getFilePath(file *Model.File) string {
-	var pathFileFolder, _ = os.LookupEnv("PATH_FILES")
-
-	var path string
-	if file.FolderID == 0 {
-		path = pathFileFolder + strconv.Itoa(file.UserID) + "/" + file.FileNameHash
-	} else {
-		path = pathFileFolder + strconv.Itoa(file.UserID) + "/" + strconv.Itoa(file.FolderID) + "/" + file.FileNameHash
-	}
-	return path
-}
-
-func getUploadPath(user *Model.User, filesNameHash string, folderId uint32) string {
-	var pathFileFolder, _ = os.LookupEnv("PATH_FILES")
-	var path string
-
-	if folderId != 0 {
-		path = pathFileFolder + strconv.Itoa(int(user.ID)) + "/" + strconv.Itoa(int(folderId)) + "/" + filesNameHash
-	} else {
-		path = pathFileFolder + strconv.Itoa(int(user.ID)) + "/" + filesNameHash
-	}
-	return path
-}
-
-func createFile(req *files.FileUploadRequest, user *Model.User, filesNameHash string) (*gorm.DB, *Model.File) {
-	var file *Model.File
-	if req.GetFolderId() != 0 {
-		file = &Model.File{
-			FileName: req.GetFileName(),
-			UserRelation: Model.UserRelation{
-				UserID: int(user.ID),
-			},
-			FolderRelation: Model.FolderRelation{
-				FolderID: int(req.GetFolderId()),
-			},
-			Size:         int(len(req.GetChunk())),
-			FileNameHash: filesNameHash,
-			AccessId:     consts.CLOSE,
-		}
-	} else {
-		file = &Model.File{
-			FileName: req.GetFileName(),
-			UserRelation: Model.UserRelation{
-				UserID: int(user.ID),
-			},
-			Size:         int(len(req.GetChunk())),
-			FileNameHash: filesNameHash,
-			AccessId:     consts.CLOSE,
-		}
-	}
-
-	result := db.DB.Model(&Model.File{}).Create(&file)
-	return result, file
-}
-
-func rollbackFile(user *Model.User, filesNameHash string, folderId uint32, fileId uint) {
-	path := getUploadPath(user, filesNameHash, folderId)
-	db.DB.Model(&Model.File{}).Where("id=?", fileId).Unscoped().Delete(&Model.File{})
-	os.Remove(path)
-}
-
-func writeInFile(req *files.FileUploadRequest, dst *os.File, fileSize *uint32, user *Model.User, filesNameHash string, file *Model.File) error {
-	chunk := req.GetChunk()
-	fmt.Println(uint32(len(chunk) / 12))
-	dst.WriteAt(chunk, int64(*fileSize))
-
-	*fileSize += uint32(len(chunk))
-
-	if !policy.SpacePolicy(uint32(len(chunk))) {
-		rollbackFile(user, filesNameHash, req.GetFolderId(), file.ID)
-		return errors.New("недостаточно места")
-	}
-	result := db.DB.Model(&Model.File{}).Where("id=?", file.ID).Update("size", fileSize)
-	if result.Error != nil {
-		rollbackFile(user, filesNameHash, req.GetFolderId(), file.ID)
-		return errors.New("недостаточно места")
-	}
-	return nil
-}
-
-func FindFile(context context.Context, in *files.FindFileRequest) (*files.FindFileResponse, error) {
+func (s *FilesServer) FindFile(context context.Context, in *files.FindFileRequest) (*files.FindFileResponse, error) {
 	user, err := helpers.GetUserFormMd(context)
 	var file []*files.FileFind
 	var folder []*files.FolderFind

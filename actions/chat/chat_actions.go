@@ -13,6 +13,8 @@ import (
 	Model "github.com/R1kkass/GoCloudGRPC/models"
 	"github.com/R1kkass/GoCloudGRPC/proto/chat"
 	"github.com/R1kkass/GoCloudGRPC/structs"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func SendFirstParams(chat *Model.Chat) (string, int64) {
@@ -116,7 +118,7 @@ func NotificationChatCreate(userId int, objectMessage map[string]any) {
 	}
 }
 
-func NotificationMessageCreate(chatId int, message string, userId int, conns map[string]structs.DataStreamConnect, messageId uint) {
+func NotificationMessageCreate(chatId uint, message string, userId uint, conns map[string]structs.DataStreamConnect, messageId uint) {
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -129,7 +131,7 @@ func NotificationMessageCreate(chatId int, message string, userId int, conns map
 		"title":       "Новое сообщение",
 		"type":        "New_Message",
 		"options": map[string]string{
-			"chat_id": strconv.Itoa(chatId),
+			"chat_id": strconv.Itoa(int(chatId)),
 		},
 	}
 	var users []*Model.ChatUser
@@ -142,10 +144,10 @@ func NotificationMessageCreate(chatId int, message string, userId int, conns map
 				fmt.Println("Error in NotificationMessageCreate: ", r)
 			}
 		}()
-	
-		var connectedUsers = make(map[int]bool)
+
+		var connectedUsers = make(map[uint]bool)
 		for _, connectedUser := range conns {
-			connectedUsers[int(connectedUser.UserID)] = true
+			connectedUsers[connectedUser.UserID] = true
 		}
 		objectMessage, _ := json.Marshal(mapMessage)
 
@@ -156,14 +158,20 @@ func NotificationMessageCreate(chatId int, message string, userId int, conns map
 			}
 			if user.UserID != userId {
 				message := &Model.UnReadedMessage{
-					ChatID: chatId,
+					
+					ChatRelations: Model.ChatRelations{
+						ChatID: chatId,
+					},
 					UserRelation: Model.UserRelation{
 						UserID: user.UserID,
 					},
-					MessageID: messageId,
+					MessageRelations: Model.MessageRelations{
+						MessageID: messageId,
+					},
 				}
 				db.DB.Create(&message)
-				db.ConnectRedisDB.Publish(context.TODO(), strconv.Itoa(int(user.UserID))+"_messages", objectMessage)
+				go db.ConnectRedisDB.Publish(context.TODO(), strconv.Itoa(int(user.UserID))+"_messages", "true")
+				go db.ConnectRedisDB.Publish(context.TODO(), strconv.Itoa(int(user.UserID))+"_messages_general", "true")
 			}
 		}
 	}()
@@ -182,14 +190,14 @@ func NotificationObserver(ctx context.Context, userId int, channel *chan bool) {
 
 		if err != nil {
 			log.Println("Can not create subscribe")
-			return
+			break
 		}
 
 		*channel <- true
 	}
 }
 
-func RemoveUnReadedMessage(messageId int, userId int, chatId int) (*chat.Message, error) {
+func RemoveUnReadedMessage(messageId uint, userId uint, chatId uint) (*chat.Message, error) {
 	r := db.DB.Unscoped().Where("user_id = ? AND message_id = ? AND chat_id = ?", userId, messageId, chatId).Delete(&Model.UnReadedMessage{})
 
 	if r.Error != nil {
@@ -236,4 +244,86 @@ func GetCountNotReadedMessages(chatId int, userId int) (int64, error) {
 	}
 
 	return count, nil
+}
+
+func StreamGetMessages(stream chat.ChatGreeter_StreamGetMessagesServer, conns map[string]structs.DataStreamConnect, chatId uint, userId uint, channel *chan *chat.StreamGetMessagesResponse, token string) error {
+
+	for {
+		msg, err := stream.Recv()
+
+		if err != nil {
+			CloseConnect(conns, token)
+			return status.Error(codes.Unknown, "неизвестная ошибка")
+		}
+		if msg.GetType() == chat.TypeMessage_SEND_MESSAGE {
+
+			if len(msg.GetMessage()) < 100 {
+				CloseConnect(conns, token)
+				return status.Error(codes.Unknown, "неизвестная ошибка")
+			}
+			var messageResponse *chat.Message
+
+			message := &Model.Message{
+				Text: string(msg.GetMessage()),
+				UserRelation: Model.UserRelation{
+					UserID: userId,
+				},
+				ChatRelations: Model.ChatRelations{
+					ChatID: chatId,
+				},
+				TypeMessage: Model.TextMessage,
+			}
+
+			r := db.DB.Preload("User").
+				Create(&message).
+				Select("messages.*, true as un_readed_message").
+				Where("messages.id = ?", message.ID).First(&messageResponse)
+
+			if r.Error != nil || r.RowsAffected == 0 {
+				CloseConnect(conns, token)
+				return status.Error(codes.Unknown, "неизвестная ошибка")
+			}
+
+			go NotificationMessageCreate(chatId, msg.GetMessage(), userId, conns, message.ID)
+
+			*channel <- &chat.StreamGetMessagesResponse{
+				Message: messageResponse,
+				Type:    msg.GetType(),
+			}
+		}
+
+		if msg.GetType() == chat.TypeMessage_READ_MESSAGE {
+			message, err := RemoveUnReadedMessage(uint(msg.GetMessageId()), userId, chatId)
+
+			if err != nil {
+				CloseConnect(conns, token)
+				return status.Error(codes.Unknown, "неизвестная ошибка")
+			}
+
+			if message != nil {
+				*channel <- &chat.StreamGetMessagesResponse{
+					Message: message,
+					Type:    msg.GetType(),
+				}
+			}
+			var count int64
+			r := db.DB.Model(&Model.UnReadedMessage{}).Where("chat_id = ? AND user_id = ?", chatId, userId).Count(&count)
+
+			if r.Error == nil {
+				if count == 0 {
+					db.ConnectRedisDB.Publish(context.TODO(), strconv.Itoa(int(userId))+"_messages_general", "true")
+				}
+			}
+		}
+
+	}
+}
+
+func CloseConnect(conns map[string]structs.DataStreamConnect, token string) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Error close connection: ", r)
+		}
+	}()
+	delete(conns, token)
 }
