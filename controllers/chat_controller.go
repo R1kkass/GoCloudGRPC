@@ -17,8 +17,9 @@ import (
 	"github.com/R1kkass/GoCloudGRPC/proto/chat"
 	"github.com/R1kkass/GoCloudGRPC/structs"
 	"github.com/R1kkass/GoCloudGRPC/validate"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -570,18 +571,20 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 		return status.Error(codes.Unauthenticated, "Пользователь не найден")
 	}
 
-	var completedParts []*s3.CompletedPart
+	var completedParts []types.CompletedPart
 	var resp *s3.CreateMultipartUploadOutput
 	partNumber := 1
 	var message *Model.Message
 	var chatFile *Model.ChatFile
-
+	var size int
 	defer func() {
 		if requestStream.Context().Err() == nil && resp != nil {
-			_, err := chat_actions.CompleteMultipartUpload(resp, completedParts)
+			_, err := chat_actions.CompleteMultipartUpload(ctx, resp, completedParts)
 			if err != nil {
-				fmt.Println(err)
+				// fmt.Println(err)
 				chat_actions.Rollback(message.ID)
+			} else {
+				db.DB.Model(&Model.ChatFile{}).Where("id = ?", chatFile.ID).Update("size =", size)
 			}
 		}
 		if r := recover(); r != nil {
@@ -596,6 +599,7 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 		if err != nil {
 			return err
 		}
+		fmt.Println(req.GetChatId())
 
 		err = validate.Valid(
 			validate.ValidType{
@@ -620,13 +624,12 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 		}
 
 		if resp == nil {
-
 			err := db.DB.Transaction(func(tx *gorm.DB) error {
 				message = &Model.Message{
 					ChatRelations: Model.ChatRelations{
 						ChatID: uint(req.GetChatId()),
 					},
-					Text: "",
+					Text: req.GetText(),
 					UserRelation: Model.UserRelation{
 						UserID: user.ID,
 					},
@@ -655,26 +658,28 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 				return nil
 			})
 			if err != nil {
+				fmt.Println(err)
 				return status.Error(codes.Unknown, "Неизвестная ошибка")
 			}
 			input := &s3.CreateMultipartUploadInput{
 				Bucket: aws.String(awsBucket),
 				Key:    aws.String("ChatFiles/" + strconv.Itoa(int(chatFile.ID))),
 			}
-			resp, err = db.SVC.CreateMultipartUpload(input)
+			resp, err = db.SVC.CreateMultipartUpload(ctx, input)
 
 			if err != nil {
+				fmt.Println(err)
 				return status.Error(codes.Unknown, "Неизвестная ошибка")
 			}
 		}
-
-		completedPart, err := chat_actions.UploadPart(resp, req.GetChunk(), partNumber)
+		size += len(req.GetChunk())
+		completedPart, err := chat_actions.UploadPart(ctx, resp, req.GetChunk(), partNumber)
 		if err != nil {
-			chat_actions.AbortMultipartUpload(resp)
-
+			chat_actions.AbortMultipartUpload(ctx, resp)
+			fmt.Println(err)
 			return status.Error(codes.Unknown, "Неизвестная ошибка")
 		}
-		completedParts = append(completedParts, completedPart)
+		completedParts = append(completedParts, *completedPart)
 		partNumber++
 	}
 }

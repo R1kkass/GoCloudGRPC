@@ -1,24 +1,24 @@
 package db
 
 import (
-	"os"
+	"context"
+	"fmt"
+	"log"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-var SVC *s3.S3
+var SVC *s3.Client
 
 func AwsConnect() {
 
-	awsRegion, _ := os.LookupEnv("AWS_DEFAULT_REGION")
+	cfg, err := config.LoadDefaultConfig(context.TODO())
+	fmt.Println(cfg.Region)
+    if err != nil {
+        log.Fatal(err)
+    }
 
-	sess, _ := session.NewSession(&aws.Config{
-		Region:   aws.String(awsRegion),
-		Endpoint: aws.String("https://storage.yandexcloud.net/")},
-	)
-
-	SVC = s3.New(sess)
-
+    // Создаем клиента для доступа к хранилищу S3
+    SVC = s3.NewFromConfig(cfg)
 }

@@ -175,4 +175,5 @@ type ChatFile struct {
 	MessageRelations
 
 	FileName string `json:"file_name"`
+	Size int64 `json:"size"`
 }

@@ -172,6 +172,7 @@ message UploadFileChat {
     bytes chunk = 1;
     string fileName = 2;
     uint32 chatId = 3;
+    string text = 4;
 }
 
 message DownloadFileChatResponse {
