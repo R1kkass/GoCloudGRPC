@@ -2,11 +2,11 @@ package db
 
 import (
 	"context"
-	"fmt"
 	"log"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/aws"
 )
 
 var SVC *s3.Client
@@ -14,11 +14,10 @@ var SVC *s3.Client
 func AwsConnect() {
 
 	cfg, err := config.LoadDefaultConfig(context.TODO())
-	fmt.Println(cfg.Region)
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    // Создаем клиента для доступа к хранилищу S3
-    SVC = s3.NewFromConfig(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	cfg.BaseEndpoint = aws.String("https://storage.yandexcloud.net")
+	// Создаем клиента для доступа к хранилищу S3
+	SVC = s3.NewFromConfig(cfg)
 }

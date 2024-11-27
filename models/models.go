@@ -26,7 +26,7 @@ type Folder struct {
 type User struct {
 	DefaultModel
 	ID       uint   `gorm:"primary_key" json:"id"`
-	Email    string `json:"email"`
+	Email    string `json:"email" gorm:"unique"`
 	Name     string `json:"name"`
 	Password string `json:"-"`
 	Files    []File
@@ -123,6 +123,13 @@ const (
 	FileMessage TypeMessage = "file"
 )
 
+type StatusMessage string
+
+const (
+	Uploading StatusMessage = "uploading"
+	Success   StatusMessage = "success"
+)
+
 type Message struct {
 	DefaultModel
 	UserRelation
@@ -132,7 +139,8 @@ type Message struct {
 	UnReadedMessage *UnReadedMessage `json:"un_readed_message"`
 	StatusRead      bool             `json:"status_read"`
 	TypeMessage     TypeMessage      `json:"type_message" gorm:"default:text"`
-	ChatFile        []*ChatFile      `json:"chat_file_id"`
+	ChatFiles       []*ChatFile      `json:"chat_files"`
+	StatusMessage   StatusMessage    `json:"-" gorm:"default:success"`
 }
 
 type Keys struct {
@@ -175,5 +183,5 @@ type ChatFile struct {
 	MessageRelations
 
 	FileName string `json:"file_name"`
-	Size int64 `json:"size"`
+	Size     int64  `json:"size"`
 }

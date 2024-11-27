@@ -16,13 +16,15 @@ service ChatGreeter {
     rpc StreamGetMessagesGeneral(Empty) returns (stream StreamGetMessagesGeneralResponse);
     rpc StreamGetMessages(stream StreamGetMessagesRequest) returns (stream StreamGetMessagesResponse);
     rpc GetUnSuccessChats(Empty) returns (GetUnSuccessChatsResponse);
-    rpc UploadChatFile(stream UploadFileChat) returns (Empty);
+    rpc UploadChatFile(stream UploadFileChatRequest) returns (UploadFileChatResponse);
     rpc DownloadChatFile(DownloadFileChatRequest) returns (stream DownloadFileChatResponse);
+    rpc CreateFileMessage(CreateFileMessageRequest) returns (CreateFileMessageResponse);
 }
 
 enum TypeMessage {
     SEND_MESSAGE = 0;
     READ_MESSAGE = 1;
+    UPLOAD_MESSAGE = 2;
 }
 
 message StreamGetMessagesRequest {
@@ -121,6 +123,16 @@ message Message {
     User user = 7;
     bool status_read = 8;
     bool un_readed_message = 9;
+    repeated ChatFile chat_files = 10;
+}
+
+message ChatFile {
+    uint32 id = 1;
+    uint32 chat_id = 2;
+    uint32 user_id = 3;
+    uint32 message_id = 4;
+    int64 size = 5;
+    string file_name = 6;
 }
 
 message User {
@@ -168,17 +180,31 @@ message GetMessagesResponse {
     int32 count_not_read = 3; 
 }
 
-message UploadFileChat {
+message UploadFileChatRequest {
     bytes chunk = 1;
     string fileName = 2;
-    uint32 chatId = 3;
+    uint32 messageId = 3;
     string text = 4;
+}
+
+message UploadFileChatResponse {
+    string message = 1;
 }
 
 message DownloadFileChatResponse {
     bytes chunk = 1;
+    float progress = 2;
 }
 
 message DownloadFileChatRequest {
     uint32 chat_file_id = 1;
+}
+
+message CreateFileMessageRequest {
+    string text = 1;
+    uint32 chat_id = 2;
+}
+
+message CreateFileMessageResponse {
+    uint32 message_id = 1;
 }

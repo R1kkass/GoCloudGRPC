@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strconv"
@@ -182,10 +183,10 @@ func (s *ChatServer) StreamGetChat(in *chat.Empty, requestStream chat.ChatGreete
 
 	db.DB.Model(&Model.ChatUser{}).Select(`chat_users.*, COALESCE(messages.created_at,'2022-10-19 15:23:53.252567+00') as create_at_message, count(un_readed_messages.id) as un_readed_messages_count`).
 		Joins("LEFT JOIN un_readed_messages ON un_readed_messages.chat_id = chat_users.chat_id AND un_readed_messages.user_id = ?", user.ID).
-		Joins("LEFT JOIN (SELECT * FROM (SELECT distinct on(chat_id) chat_id, created_at FROM messages ORDER BY chat_id, created_at DESC) t ORDER BY created_at DESC) AS messages ON messages.chat_id = chat_users.chat_id", user.ID).
+		Joins("LEFT JOIN (SELECT * FROM (SELECT distinct on(chat_id) chat_id, created_at, status_message FROM messages WHERE status_message = 'success' ORDER BY chat_id, created_at DESC) t ORDER BY created_at DESC) AS messages ON messages.chat_id = chat_users.chat_id AND messages.status_message = 'success'", user.ID).
 		Preload("User").Preload("Chat").Preload("Chat.ChatUsers.User").
 		Preload("Chat.Message", func(db *gorm.DB) *gorm.DB {
-			return db.Order("messages.id ASC")
+			return db.Where("status_message = 'success'").Order("messages.id ASC")
 		}).
 		Preload("Chat.Message.User").
 		Where("chat_users.user_id = ? AND submit_create = ?", user.ID, true).
@@ -208,10 +209,10 @@ func (s *ChatServer) StreamGetChat(in *chat.Empty, requestStream chat.ChatGreete
 
 		db.DB.Model(&Model.ChatUser{}).Select(`chat_users.*, COALESCE(messages.created_at,'2022-10-19 15:23:53.252567+00') as create_at_message, count(un_readed_messages.id) as un_readed_messages_count`).
 			Joins("LEFT JOIN un_readed_messages ON un_readed_messages.chat_id = chat_users.chat_id AND un_readed_messages.user_id = ?", user.ID).
-			Joins("LEFT JOIN (SELECT * FROM (SELECT distinct on(chat_id) chat_id, created_at FROM messages ORDER BY chat_id, created_at DESC) t ORDER BY created_at DESC) AS messages ON messages.chat_id = chat_users.chat_id", user.ID).
+			Joins("LEFT JOIN (SELECT * FROM (SELECT distinct on(chat_id) chat_id, created_at, status_message FROM messages WHERE status_message = 'success' ORDER BY chat_id, created_at DESC) t ORDER BY created_at DESC) AS messages ON messages.chat_id = chat_users.chat_id", user.ID).
 			Preload("User").Preload("Chat").Preload("Chat.ChatUsers.User").
 			Preload("Chat.Message", func(db *gorm.DB) *gorm.DB {
-				return db.Order("messages.id ASC")
+				return db.Where("status_message = 'success'").Order("messages.id ASC")
 			}).
 			Preload("Chat.Message.User").
 			Where("chat_users.user_id = ? AND submit_create = ?", user.ID, true).
@@ -541,7 +542,8 @@ func (s *ChatServer) GetMessages(ctx context.Context, in *chat.GetMessagesReques
 	r := db.DB.Model(&Model.Message{}).Preload("User").
 		Select("messages.*, SUM(CASE WHEN un_readed_messages.id IS NULL THEN 0 ELSE 1 END) AS un_readed_message").
 		Joins("LEFT JOIN un_readed_messages ON un_readed_messages.message_id = messages.id AND un_readed_messages.user_id = ?", user.ID).
-		Where("messages.chat_id = ?", in.GetChatId()).
+		Preload("ChatFiles").
+		Where("messages.chat_id = ? AND status_message = 'success'", in.GetChatId()).
 		Group("messages.id").
 		Order("id DESC").Offset(10 * int(page)).
 		Limit(10).
@@ -574,32 +576,27 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 	var completedParts []types.CompletedPart
 	var resp *s3.CreateMultipartUploadOutput
 	partNumber := 1
-	var message *Model.Message
+	var messageId uint
 	var chatFile *Model.ChatFile
 	var size int
 	defer func() {
-		if requestStream.Context().Err() == nil && resp != nil {
-			_, err := chat_actions.CompleteMultipartUpload(ctx, resp, completedParts)
-			if err != nil {
-				// fmt.Println(err)
-				chat_actions.Rollback(message.ID)
-			} else {
-				db.DB.Model(&Model.ChatFile{}).Where("id = ?", chatFile.ID).Update("size =", size)
-			}
-		}
 		if r := recover(); r != nil {
-			fmt.Println("Error UploadChatFile:", r)
-			chat_actions.Rollback(message.ID)
+			chat_actions.Rollback(messageId)
 		}
 	}()
 
 	for {
 		req, err := requestStream.Recv()
 
+		if err == io.EOF {
+			break
+		}
+
 		if err != nil {
+			fmt.Println("Error UploadChatFile: ", err)
+			fmt.Println(req.GetChunk(), req.GetFileName(), req.GetMessageId(), req.GetText())
 			return err
 		}
-		fmt.Println(req.GetChatId())
 
 		err = validate.Valid(
 			validate.ValidType{
@@ -607,9 +604,9 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 					Rule:  "required|string",
 					Value: req.GetFileName(),
 				},
-				"chatId": validate.ValidateStruct{
+				"messageId": validate.ValidateStruct{
 					Rule:  "required|uint32",
-					Value: req.GetChatId(),
+					Value: req.GetMessageId(),
 				},
 				"chunk": validate.ValidateStruct{
 					Rule:  "required",
@@ -619,46 +616,40 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 		)
 
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("Error UploadChatFile: ", err)
 			return status.Error(codes.Unknown, "Неизвестная ошибка")
 		}
 
+		chatUser, err := chat_actions.CheckChatByMessageId(req.GetMessageId(), user.ID)
+
+		if err != nil {
+			fmt.Println("Error UploadChatFile: ", err)
+			return status.Error(codes.Unknown, "Чат не найден")
+		}
+
 		if resp == nil {
+			messageId = uint(req.GetMessageId())
 			err := db.DB.Transaction(func(tx *gorm.DB) error {
-				message = &Model.Message{
-					ChatRelations: Model.ChatRelations{
-						ChatID: uint(req.GetChatId()),
-					},
-					Text: req.GetText(),
-					UserRelation: Model.UserRelation{
-						UserID: user.ID,
-					},
-					TypeMessage: Model.FileMessage,
-				}
-				r := tx.Create(&message)
-				if r.RowsAffected == 0 || r.Error != nil {
-					return errors.New("ошибка создания Message")
-				}
 				chatFile = &Model.ChatFile{
 					ChatRelations: Model.ChatRelations{
-						ChatID: message.ChatID,
+						ChatID: chatUser.ChatID,
 					},
 					MessageRelations: Model.MessageRelations{
-						MessageID: message.ID,
+						MessageID: uint(req.GetMessageId()),
 					},
 					UserRelation: Model.UserRelation{
 						UserID: user.ID,
 					},
 					FileName: req.GetFileName(),
 				}
-				r = tx.Create(&chatFile)
+				r := tx.Create(&chatFile)
 				if r.RowsAffected == 0 || r.Error != nil {
 					return errors.New("ошибка создания ChatFile")
 				}
 				return nil
 			})
 			if err != nil {
-				fmt.Println(err)
+				fmt.Println("Error UploadChatFile: ", err)
 				return status.Error(codes.Unknown, "Неизвестная ошибка")
 			}
 			input := &s3.CreateMultipartUploadInput{
@@ -682,6 +673,14 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 		completedParts = append(completedParts, *completedPart)
 		partNumber++
 	}
+	_, err = chat_actions.CompleteMultipartUpload(ctx, resp, completedParts)
+	if err != nil {
+		fmt.Println("Error UploadChatFile:", err)
+		return status.Error(codes.Unknown, "Не удалось загрузить файл")
+	}
+
+	db.DB.Model(&Model.ChatFile{}).Where("id = ?", chatFile.ID).Update("size", size)
+	return requestStream.SendAndClose(&chat.UploadFileChatResponse{Message: "Успешно загружено"})
 }
 
 func (s *ChatServer) StreamGetMessagesGeneral(in *chat.Empty, responseStream chat.ChatGreeter_StreamGetMessagesGeneralServer) error {
@@ -778,6 +777,98 @@ func (s *ChatServer) StreamGetMessages(stream chat.ChatGreeter_StreamGetMessages
 	return chat_actions.StreamGetMessages(stream, s.Conns, uint(chatId), user.ID, &channel, jwtToken[1])
 }
 
-func (s *ChatServer) DownloaFileChat(in *chat.DownloadFileChatRequest, responseStream chat.ChatGreeter_DownloadChatFileServer	) {
-	
+func (s *ChatServer) DownloadChatFile(in *chat.DownloadFileChatRequest, responseStream chat.ChatGreeter_DownloadChatFileServer) error {
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Panic error: ", r)
+		}
+	}()
+
+	ctx := responseStream.Context()
+	user, err := helpers.GetUserFormMd(ctx)
+	if err != nil {
+		fmt.Println("Error DownloadFileChat: ", err)
+		return status.Error(codes.NotFound, "Пользователь не найден")
+	}
+
+	err = chat_actions.CheckChatFile(user, in.GetChatFileId())
+	if err != nil {
+		fmt.Println("Error DownloadFileChat: ", err)
+		return status.Error(codes.NotFound, "Файл не найден")
+	}
+
+	size, err := chat_actions.GetFileSize(ctx, strconv.Itoa(int(in.GetChatFileId())))
+	var rangeInt int64 = 0
+	if err != nil {
+		fmt.Println("Error DownloadFileChat: ", err)
+		return status.Error(codes.Unknown, "Неизвестная ошибка")
+	}
+
+	for *size > rangeInt {
+		bytes, err := chat_actions.DownloadChunk(ctx, strconv.Itoa(int(in.GetChatFileId())), rangeInt, int(*size))
+		if err != nil {
+			fmt.Println("Error DownloadFileChat: ", err)
+			return status.Error(codes.Unknown, "Неизвестная ошибка")
+		}
+		rangeInt += 256 * 1024
+		responseStream.Send(&chat.DownloadFileChatResponse{
+			Chunk:    bytes,
+			Progress: float32(rangeInt / (*size) * 100),
+		})
+	}
+
+	return nil
+}
+
+func (s *ChatServer) CreateFileMessage(ctx context.Context, in *chat.CreateFileMessageRequest) (*chat.CreateFileMessageResponse, error) {
+	err := validate.Valid(
+		validate.ValidType{
+			"chatId": validate.ValidateStruct{
+				Rule:  "required",
+				Value: in.GetChatId(),
+			},
+		},
+	)
+
+	if err != nil {
+		fmt.Println("Error CreateFileMessage: ", err)
+		return nil, status.Error(codes.Unknown, "Неизвестная ошибка")
+	}
+
+	user, err := helpers.GetUserFormMd(ctx)
+	if err != nil {
+		fmt.Println("Error CreateFileMessage: ", err)
+		return nil, status.Error(codes.NotFound, "Пользователь не найден")
+	}
+
+	err, _ = chat_actions.CheckChat(in.GetChatId(), user.ID)
+
+	if err != nil {
+		fmt.Println("Error CreateFileMessage: ", err)
+		return nil, status.Error(codes.NotFound, "Чат не найден")
+	}
+
+	var message = &Model.Message{
+		Text: in.GetText(),
+		UserRelation: Model.UserRelation{
+			UserID: user.ID,
+		},
+		ChatRelations: Model.ChatRelations{
+			ChatID: uint(in.GetChatId()),
+		},
+		TypeMessage:   Model.FileMessage,
+		StatusMessage: Model.Uploading,
+	}
+
+	r := db.DB.Create(&message)
+
+	if r.Error != nil || r.RowsAffected == 0 {
+		fmt.Println("Error CreateFileMessage: ", err)
+		return nil, status.Error(codes.Unknown, "Неизвестная ошибка")
+	}
+
+	return &chat.CreateFileMessageResponse{
+		MessageId: uint32(message.ID),
+	}, nil
 }

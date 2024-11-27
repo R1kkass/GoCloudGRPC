@@ -78,6 +78,26 @@ func CheckChat(chat_id uint32, user_id uint) (error, *Model.ChatUser) {
 	return nil, chat
 }
 
+func CheckChatByMessageId(message_id uint32, user_id uint) (*Model.ChatUser, error) {
+	var message *Model.Message
+
+	r := db.DB.Model(&Model.Message{}).Where("id = ? AND user_id = ?", message_id, user_id).First(&message)
+
+	if r.Error != nil || r.RowsAffected == 0 {
+		return nil, errors.New("сообщение не найдено")
+	}
+
+	var chat *Model.ChatUser
+
+	result := db.DB.Model(&Model.ChatUser{}).Where("chat_id = ? AND user_id = ?", message.ChatID, user_id).First(&chat)
+
+	if result.RowsAffected == 0 {
+		return nil, errors.New("чат не найден")
+	}
+
+	return chat, nil
+}
+
 func GetPublicKey(chatId uint32) (*Model.Keys, error) {
 
 	var keys *Model.Keys
@@ -158,7 +178,7 @@ func NotificationMessageCreate(chatId uint, message string, userId uint, conns m
 			}
 			if user.UserID != userId {
 				message := &Model.UnReadedMessage{
-					
+
 					ChatRelations: Model.ChatRelations{
 						ChatID: chatId,
 					},
@@ -208,9 +228,10 @@ func RemoveUnReadedMessage(messageId uint, userId uint, chatId uint) (*chat.Mess
 
 	var message *chat.Message
 
-	r = db.DB.Model(&Model.Message{}).Where("messages.id = ? AND messages.chat_id = ? AND messages.user_id != ?", messageId, chatId, userId).
+	r = db.DB.Model(&Model.Message{}).Where("messages.id = ? AND messages.chat_id = ? AND messages.user_id != ? AND status_message = 'success'", messageId, chatId, userId).
 		Select("messages.*, SUM(CASE WHEN un_readed_messages.id IS NULL THEN 0 ELSE 1 END) AS un_readed_message").
 		Preload("User").
+		Preload("Chatfiles").
 		Joins("LEFT JOIN un_readed_messages ON un_readed_messages.message_id = messages.id AND un_readed_messages.user_id = ?", userId).
 		Group("messages.id").
 		First(&message)
@@ -248,6 +269,12 @@ func GetCountNotReadedMessages(chatId int, userId int) (int64, error) {
 
 func StreamGetMessages(stream chat.ChatGreeter_StreamGetMessagesServer, conns map[string]structs.DataStreamConnect, chatId uint, userId uint, channel *chan *chat.StreamGetMessagesResponse, token string) error {
 
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Error chat_actions.StreamGetMessages: ", r)
+		}
+	}()
+
 	for {
 		msg, err := stream.Recv()
 
@@ -277,6 +304,7 @@ func StreamGetMessages(stream chat.ChatGreeter_StreamGetMessagesServer, conns ma
 			r := db.DB.Preload("User").
 				Create(&message).
 				Select("messages.*, true as un_readed_message").
+				Preload("ChatFiles").
 				Where("messages.id = ?", message.ID).First(&messageResponse)
 
 			if r.Error != nil || r.RowsAffected == 0 {
@@ -316,6 +344,30 @@ func StreamGetMessages(stream chat.ChatGreeter_StreamGetMessagesServer, conns ma
 			}
 		}
 
+		if msg.GetType() == chat.TypeMessage_UPLOAD_MESSAGE {
+			var message *chat.Message
+
+			r := db.DB.Model(&Model.Message{}).
+				Where("id = ?", msg.GetMessageId()).Update("status_message", Model.Success)
+
+			if r.Error != nil || r.RowsAffected == 0 {
+				db.DB.Unscoped().Where("id = ?", msg.GetMessageId()).Delete(&Model.Message{})
+				CloseConnect(conns, token)
+				return status.Error(codes.Unknown, "неизвестная ошибка")
+			}
+			db.DB.Model(&Model.Message{}).
+				Preload("User").
+				Preload("ChatFiles").
+				Select("messages.*, true as un_readed_message").
+				Where("id = ?", msg.GetMessageId()).
+				First(&message)
+			fmt.Println(message.UserId)
+			go NotificationMessageCreate(chatId, message.Text, userId, conns, uint(message.Id))
+			*channel <- &chat.StreamGetMessagesResponse{
+				Message: message,
+				Type:    chat.TypeMessage_SEND_MESSAGE,
+			}
+		}
 	}
 }
 
