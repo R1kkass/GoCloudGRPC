@@ -594,7 +594,7 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 
 		if err != nil {
 			fmt.Println("Error UploadChatFile: ", err)
-			fmt.Println(req.GetChunk(), req.GetFileName(), req.GetMessageId(), req.GetText())
+			chat_actions.Rollback(messageId)
 			return err
 		}
 
@@ -617,6 +617,7 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 
 		if err != nil {
 			fmt.Println("Error UploadChatFile: ", err)
+			chat_actions.Rollback(messageId)
 			return status.Error(codes.Unknown, "Неизвестная ошибка")
 		}
 
@@ -624,18 +625,25 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 
 		if err != nil {
 			fmt.Println("Error UploadChatFile: ", err)
+			chat_actions.Rollback(messageId)
 			return status.Error(codes.Unknown, "Чат не найден")
 		}
 
 		if resp == nil {
 			messageId = uint(req.GetMessageId())
-			err := db.DB.Transaction(func(tx *gorm.DB) error {
+			err := chat_actions.GetCountChatFile(messageId)
+			if err != nil {
+				fmt.Println("Error UploadChatFile: ", err)
+				chat_actions.Rollback(messageId)
+				return status.Error(codes.OutOfRange, "Переполнение файлов")
+			}
+			err = db.DB.Transaction(func(tx *gorm.DB) error {
 				chatFile = &Model.ChatFile{
 					ChatRelations: Model.ChatRelations{
 						ChatID: chatUser.ChatID,
 					},
 					MessageRelations: Model.MessageRelations{
-						MessageID: uint(req.GetMessageId()),
+						MessageID: messageId,
 					},
 					UserRelation: Model.UserRelation{
 						UserID: user.ID,
@@ -650,6 +658,7 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 			})
 			if err != nil {
 				fmt.Println("Error UploadChatFile: ", err)
+				chat_actions.Rollback(messageId)
 				return status.Error(codes.Unknown, "Неизвестная ошибка")
 			}
 			input := &s3.CreateMultipartUploadInput{
@@ -660,6 +669,7 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 
 			if err != nil {
 				fmt.Println(err)
+				chat_actions.Rollback(messageId)
 				return status.Error(codes.Unknown, "Неизвестная ошибка")
 			}
 		}
@@ -668,6 +678,7 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 		if err != nil {
 			chat_actions.AbortMultipartUpload(ctx, resp)
 			fmt.Println(err)
+			chat_actions.Rollback(messageId)
 			return status.Error(codes.Unknown, "Неизвестная ошибка")
 		}
 		completedParts = append(completedParts, *completedPart)
@@ -676,6 +687,7 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 	_, err = chat_actions.CompleteMultipartUpload(ctx, resp, completedParts)
 	if err != nil {
 		fmt.Println("Error UploadChatFile:", err)
+		chat_actions.Rollback(messageId)
 		return status.Error(codes.Unknown, "Не удалось загрузить файл")
 	}
 

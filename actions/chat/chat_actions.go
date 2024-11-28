@@ -231,7 +231,7 @@ func RemoveUnReadedMessage(messageId uint, userId uint, chatId uint) (*chat.Mess
 	r = db.DB.Model(&Model.Message{}).Where("messages.id = ? AND messages.chat_id = ? AND messages.user_id != ? AND status_message = 'success'", messageId, chatId, userId).
 		Select("messages.*, SUM(CASE WHEN un_readed_messages.id IS NULL THEN 0 ELSE 1 END) AS un_readed_message").
 		Preload("User").
-		Preload("Chatfiles").
+		Preload("ChatFiles").
 		Joins("LEFT JOIN un_readed_messages ON un_readed_messages.message_id = messages.id AND un_readed_messages.user_id = ?", userId).
 		Group("messages.id").
 		First(&message)

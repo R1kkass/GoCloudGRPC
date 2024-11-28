@@ -86,6 +86,23 @@ func AbortMultipartUpload(ctx context.Context, resp *s3.CreateMultipartUploadOut
 }
 
 func Rollback(messageId uint) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Error Rollback: ", r)
+		}
+	}()
+
+	var modelChatFile []*Model.ChatFile
+	db.DB.Model(&Model.ChatFile{}).Where("message_id = ?", messageId).Find(&modelChatFile)
+	awsBucket, _ := os.LookupEnv("AWS_BUCKET")
+
+	for _, v := range modelChatFile {
+		db.SVC.DeleteObject(context.Background(), &s3.DeleteObjectInput{
+			Bucket: aws.String(awsBucket),
+			Key:    aws.String("ChatFiles/" + strconv.Itoa(int(v.ID))),
+		})
+	}
+
 	db.DB.Unscoped().Where("message_id = ?", messageId).Delete(&Model.ChatFile{})
 	db.DB.Unscoped().Where("id = ?", messageId).Delete(&Model.Message{})
 }
@@ -107,8 +124,8 @@ func DownloadChunk(ctx context.Context, key string, rangeInt int64, size int) ([
 
 	partInput := &s3.GetObjectInput{
 		Bucket:     aws.String(awsBucket),
-		Key:        aws.String("ChatFiles/"+key),
-		PartNumber: aws.Int32(int32(rangeInt / (256*1024))),
+		Key:        aws.String("ChatFiles/" + key),
+		PartNumber: aws.Int32(int32(rangeInt / (256 * 1024))),
 		Range:      aws.String("bytes=" + strconv.Itoa(rangeNum) + "-" + strconv.Itoa(rangeNumEnd)),
 	}
 	r, err := db.SVC.GetObject(ctx, partInput)
@@ -131,7 +148,7 @@ func GetFileSize(ctx context.Context, key string) (*int64, error) {
 	}
 
 	headInput := &s3.HeadObjectInput{
-		Key:    aws.String("ChatFiles/"+key),
+		Key:    aws.String("ChatFiles/" + key),
 		Bucket: aws.String(awsBucket),
 	}
 
@@ -144,10 +161,10 @@ func GetFileSize(ctx context.Context, key string) (*int64, error) {
 	return resp.ContentLength, nil
 }
 
-func CheckChatFile(user *Model.User,chatId uint32) error {
+func CheckChatFile(user *Model.User, chatId uint32) error {
 	var chatFile *Model.ChatFile
 	r := db.DB.Model(&Model.ChatFile{}).Where("id = ?", chatId).First(&chatFile)
-	
+
 	if r.RowsAffected == 0 || r.Error != nil {
 		return errors.New("файл чата не найден")
 	}
@@ -157,6 +174,17 @@ func CheckChatFile(user *Model.User,chatId uint32) error {
 
 	if r.RowsAffected == 0 || r.Error != nil {
 		return errors.New("чат не найден")
+	}
+
+	return nil
+}
+
+func GetCountChatFile(messageId uint) error {
+	var count int64
+	r := db.DB.Model(&Model.ChatFile{}).Where("message_id = ?", messageId).Count(&count)
+
+	if r.Error != nil || count > 10 {
+		return errors.New("переполнение файлов")
 	}
 
 	return nil
