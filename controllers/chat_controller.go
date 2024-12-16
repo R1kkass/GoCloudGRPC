@@ -882,5 +882,7 @@ func (s *ChatServer) CreateFileMessage(ctx context.Context, in *chat.CreateFileM
 
 	return &chat.CreateFileMessageResponse{
 		MessageId: uint32(message.ID),
+		CreatedAt: message.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt: message.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}, nil
 }

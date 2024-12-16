@@ -25,6 +25,13 @@ type FilesServer struct {
 }
 
 func (s *FilesServer) DownloadFile(in *files.FileDownloadRequest, responseStream files.FilesGreeter_DownloadFileServer) error {
+	
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Error DownloadFile: ", r)
+		}
+	}()
+	
 	user, err := helpers.GetUserFormMd(responseStream.Context())
 
 	if err != nil {
@@ -89,6 +96,13 @@ func (s *FilesServer) DownloadFile(in *files.FileDownloadRequest, responseStream
 }
 
 func (s *FilesServer) UploadFile(stream files.FilesGreeter_UploadFileServer) error {
+	
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Error UploadFile: ", r)
+		}
+	}()
+	
 	user, err := helpers.GetUserFormMd(stream.Context())
 
 	if err != nil {
@@ -149,6 +163,13 @@ func (s *FilesServer) UploadFile(stream files.FilesGreeter_UploadFileServer) err
 }
 
 func (s *FilesServer) FindFile(context context.Context, in *files.FindFileRequest) (*files.FindFileResponse, error) {
+	
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Error FindFile: ", r)
+		}
+	}()
+	
 	user, err := helpers.GetUserFormMd(context)
 	var file []*files.FileFind
 	var folder []*files.FolderFind

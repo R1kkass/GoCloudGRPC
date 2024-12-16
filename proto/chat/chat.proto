@@ -25,6 +25,7 @@ enum TypeMessage {
     SEND_MESSAGE = 0;
     READ_MESSAGE = 1;
     UPLOAD_MESSAGE = 2;
+    READ_MESSAGE_ALL = 3;
 }
 
 message StreamGetMessagesRequest {
@@ -34,8 +35,9 @@ message StreamGetMessagesRequest {
 }
 
 message StreamGetMessagesResponse {
-    Message message = 2;
-    TypeMessage type = 1;
+    Message message = 1;
+    repeated Message messages = 2;
+    TypeMessage type = 3;
 }
 
 message Empty {}
@@ -207,4 +209,6 @@ message CreateFileMessageRequest {
 
 message CreateFileMessageResponse {
     uint32 message_id = 1;
+    string created_at = 2;
+    string updated_at = 3;
 }

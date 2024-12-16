@@ -120,6 +120,8 @@ func DownloadChunk(ctx context.Context, key string, rangeInt int64, size int) ([
 	if rangeNumEnd > size {
 		fmt.Println(rangeNumEnd, " ", size)
 		rangeNumEnd = size
+	} else {
+		rangeNumEnd = rangeNumEnd - 1
 	}
 
 	partInput := &s3.GetObjectInput{
