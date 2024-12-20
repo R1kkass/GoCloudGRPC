@@ -190,8 +190,12 @@ func (s *FilesServer) FindFile(context context.Context, in *files.FindFileReques
 			qFolder.Where("folder_id = ?", in.GetFolderId())
 		}
 	}
-	qFile.Where("file_name LIKE ?", "%"+in.GetSearch()+"%").Limit(10).Offset((int(in.GetPage()) - 1) * 10).Find(&file)
-	qFolder.Where("name_folder LIKE ?", "%"+in.GetSearch()+"%").Limit(10).Offset((int(in.GetPage()) - 1) * 10).Find(&folder)
+	resultQFile := qFile.Where("file_name LIKE ?", "%"+in.GetSearch()+"%").Limit(10).Offset((int(in.GetPage()) - 1) * 10).Find(&file)
+	resultQFolder := qFolder.Where("name_folder LIKE ?", "%"+in.GetSearch()+"%").Limit(10).Offset((int(in.GetPage()) - 1) * 10).Find(&folder)
+
+	if resultQFile.Error != nil || resultQFolder.Error != nil {
+		return nil, status.Error(codes.Unknown, "Не удалось найти файлы")
+	}
 
 	return &files.FindFileResponse{
 		Files:   file,

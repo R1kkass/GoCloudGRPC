@@ -112,8 +112,8 @@ type ChatUser struct {
 	UserRelation
 	ChatRelations
 
-	SubmitCreate          bool `json:"submit_create" gorm:"default:false"`
-	UnReadedMessagesCount int  `gorm:"-:migration,column:un_readed_messages_count,default:null" json:"un_readed_messages_count"`
+	SubmitCreate          StatusChat `json:"submit_create" gorm:"default:3"`
+	UnReadedMessagesCount int  `gorm:"-" json:"un_readed_messages_count"`
 }
 
 type TypeMessage string
@@ -128,6 +128,14 @@ type StatusMessage string
 const (
 	Uploading StatusMessage = "uploading"
 	Success   StatusMessage = "success"
+)
+
+type StatusChat int
+
+const (
+	CreatedChat  StatusChat = 1
+	WaitChat     StatusChat = 2
+	UnSuccessChat StatusChat = 3
 )
 
 type Message struct {

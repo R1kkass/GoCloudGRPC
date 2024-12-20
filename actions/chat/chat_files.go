@@ -191,3 +191,19 @@ func GetCountChatFile(messageId uint) error {
 
 	return nil
 }
+
+func UploadChatFile(ctx context.Context, chatFileId uint) (*s3.CreateMultipartUploadOutput, error){
+	awsBucket, ok := os.LookupEnv("AWS_BUCKET")
+
+	if !ok {
+		return nil, errors.New("не удалось получить бакет")
+	}
+
+	input := &s3.CreateMultipartUploadInput{
+		Bucket: aws.String(awsBucket),
+		Key:    aws.String("ChatFiles/" + strconv.Itoa(int(chatFileId))),
+	}
+	resp, err := db.SVC.CreateMultipartUpload(ctx, input)
+
+	return resp, err
+}

@@ -3,11 +3,9 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"strconv"
 	"strings"
 
@@ -18,14 +16,12 @@ import (
 	"github.com/R1kkass/GoCloudGRPC/proto/chat"
 	"github.com/R1kkass/GoCloudGRPC/structs"
 	"github.com/R1kkass/GoCloudGRPC/validate"
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"gorm.io/gorm"
 )
 
 type ChatServer struct {
@@ -36,7 +32,7 @@ type ChatServer struct {
 func (s *ChatServer) CreateChat(ctx context.Context, in *chat.CreateRequestChat) (*chat.CreateResponseChat, error) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("Error CreateSecondaryKey: ", r)
+			fmt.Println("Error CreateChat: ", r)
 		}
 	}()
 
@@ -53,8 +49,6 @@ func (s *ChatServer) CreateChat(ctx context.Context, in *chat.CreateRequestChat)
 		return nil, status.Error(codes.Unknown, "Неизвестная ошибка")
 	}
 
-	var chats Model.Chat
-
 	user, err := helpers.GetUserFormMd(ctx)
 
 	if err != nil {
@@ -62,50 +56,10 @@ func (s *ChatServer) CreateChat(ctx context.Context, in *chat.CreateRequestChat)
 	}
 
 	if err := chat_actions.CheckChatExist(ctx, in); err != nil {
-		return &chat.CreateResponseChat{
-			Message: "Ошибка",
-		}, status.Error(codes.AlreadyExists, "Чат уже существует")
+		return nil, status.Error(codes.AlreadyExists, "Чат уже существует")
 	}
 
-	var p string
-	var g int64
-
-	err = db.DB.Transaction(func(tx *gorm.DB) error {
-		result := tx.Create(
-			&chats,
-		)
-		var chatUsers Model.ChatUser
-
-		if result.Error != nil {
-			return errors.New("чат не создан")
-		}
-
-		result = tx.Model(&chatUsers).Create(
-			&Model.ChatUser{
-				ChatRelations: Model.ChatRelations{
-					ChatID: chats.ID,
-				},
-				UserRelation: Model.UserRelation{
-					UserID: user.ID,
-				},
-				SubmitCreate: true,
-			},
-		).Create(&Model.ChatUser{
-			ChatRelations: Model.ChatRelations{
-				ChatID: chats.ID,
-			},
-			UserRelation: Model.UserRelation{
-				UserID: uint(in.GetOtherId()),
-			},
-			SubmitCreate: false,
-		})
-		if result.Error != nil {
-			return errors.New("чат не создан")
-		}
-
-		p, g = chat_actions.SendFirstParams(&chats)
-		return nil
-	})
+	p, g, modelChat, err := chat_actions.CreateChatTransaction(user.ID, uint(in.GetOtherId()))
 
 	if err != nil {
 		return nil, status.Error(codes.Unknown, err.Error())
@@ -124,14 +78,14 @@ func (s *ChatServer) CreateChat(ctx context.Context, in *chat.CreateRequestChat)
 			P: p,
 			G: g,
 		},
-		ChatId: uint32(chats.ID),
+		ChatId: uint32(modelChat.ID),
 	}, nil
 }
 
 func (s *ChatServer) StreamGetChat(in *chat.Empty, requestStream chat.ChatGreeter_StreamGetChatServer) error {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("Error CreateSecondaryKey: ", r)
+			fmt.Println("Error StreamGetChat: ", r)
 		}
 	}()
 
@@ -181,18 +135,11 @@ func (s *ChatServer) StreamGetChat(in *chat.Empty, requestStream chat.ChatGreete
 
 	}()
 
-	db.DB.Model(&Model.ChatUser{}).Select(`chat_users.*, COALESCE(messages.created_at,'2022-10-19 15:23:53.252567+00') as create_at_message, count(un_readed_messages.id) as un_readed_messages_count`).
-		Joins("LEFT JOIN un_readed_messages ON un_readed_messages.chat_id = chat_users.chat_id AND un_readed_messages.user_id = ?", user.ID).
-		Joins("LEFT JOIN (SELECT * FROM (SELECT distinct on(chat_id) chat_id, created_at, status_message FROM messages WHERE status_message = 'success' ORDER BY chat_id, created_at DESC) t ORDER BY created_at DESC) AS messages ON messages.chat_id = chat_users.chat_id AND messages.status_message = 'success'", user.ID).
-		Preload("User").Preload("Chat").Preload("Chat.ChatUsers.User").
-		Preload("Chat.Message", func(db *gorm.DB) *gorm.DB {
-			return db.Where("status_message = 'success'").Order("messages.id ASC")
-		}).
-		Preload("Chat.Message.User").
-		Where("chat_users.user_id = ? AND submit_create = ?", user.ID, true).
-		Group("chat_users.id, un_readed_messages.chat_id, messages.created_at").
-		Order("create_at_message DESC, chat_users.created_at DESC").
-		Find(&chats)
+	chats, err = chat_actions.StreamGetChat(user.ID)
+
+	if err != nil {
+		return status.Error(codes.Unauthenticated, "Невозможно получить сообщения")
+	}
 
 	err = requestStream.Send(&chat.StreamGetResponseChat{
 		Chats: chats,
@@ -207,18 +154,11 @@ func (s *ChatServer) StreamGetChat(in *chat.Empty, requestStream chat.ChatGreete
 
 		var chats []*chat.ChatUsersCount
 
-		db.DB.Model(&Model.ChatUser{}).Select(`chat_users.*, COALESCE(messages.created_at,'2022-10-19 15:23:53.252567+00') as create_at_message, count(un_readed_messages.id) as un_readed_messages_count`).
-			Joins("LEFT JOIN un_readed_messages ON un_readed_messages.chat_id = chat_users.chat_id AND un_readed_messages.user_id = ?", user.ID).
-			Joins("LEFT JOIN (SELECT * FROM (SELECT distinct on(chat_id) chat_id, created_at, status_message FROM messages WHERE status_message = 'success' ORDER BY chat_id, created_at DESC) t ORDER BY created_at DESC) AS messages ON messages.chat_id = chat_users.chat_id", user.ID).
-			Preload("User").Preload("Chat").Preload("Chat.ChatUsers.User").
-			Preload("Chat.Message", func(db *gorm.DB) *gorm.DB {
-				return db.Where("status_message = 'success'").Order("messages.id ASC")
-			}).
-			Preload("Chat.Message.User").
-			Where("chat_users.user_id = ? AND submit_create = ?", user.ID, true).
-			Group("chat_users.id, un_readed_messages.chat_id, messages.created_at").
-			Order("create_at_message DESC, chat_users.created_at DESC").
-			Find(&chats)
+		chats, err = chat_actions.StreamGetChat(user.ID)
+
+		if err != nil {
+			return status.Error(codes.Unauthenticated, "Невозможно получить сообщения")
+		}
 
 		err := requestStream.Send(&chat.StreamGetResponseChat{
 			Chats: chats,
@@ -244,11 +184,13 @@ func (s *ChatServer) GetUnSuccessChats(ctx context.Context, in *chat.Empty) (*ch
 		return nil, status.Error(codes.PermissionDenied, "Пользователь не найден")
 	}
 
-	db.DB.Model(&Model.ChatUser{}).
+	r := db.DB.Model(&Model.ChatUser{}).
 		Preload("User").Preload("Chat").Preload("Chat.ChatUsers.User").
-		Where("chat_users.user_id = ? AND submit_create = ?", user.ID, false).
+		Where("chat_users.user_id = ? AND submit_create = ?", user.ID, Model.UnSuccessChat).
 		Find(&chats)
-
+	if r.Error != nil {
+		return nil, status.Error(codes.Unknown, "Пользователь не найден")
+	}
 	return &chat.GetUnSuccessChatsResponse{
 		Chats: chats,
 	}, nil
@@ -413,13 +355,7 @@ func (s *ChatServer) AcceptChat(ctx context.Context, in *chat.AcceptChatRequest)
 		return nil, status.Error(codes.NotFound, "Чат не найден")
 	}
 
-	user, err := helpers.GetUserFormMd(ctx)
-
-	if err != nil {
-		return nil, status.Error(codes.Aborted, "Пользователь не найден")
-	}
-
-	db.DB.Model(&Model.ChatUser{}).Where("user_id = ? AND chat_id = ?", user.ID, in.GetChatId()).Update("submit_create", true)
+	db.DB.Model(&Model.ChatUser{}).Where("chat_id = ?", in.GetChatId()).Update("submit_create", Model.CreatedChat)
 
 	return &chat.AcceptChatResponse{
 		Message: "Успех",
@@ -469,20 +405,11 @@ func (s *ChatServer) DissalowChat(ctx context.Context, in *chat.DissalowChatRequ
 		return nil, status.Error(codes.Aborted, "Чат не найден")
 	}
 
-	db.DB.Transaction(func(tx *gorm.DB) error {
-		result = tx.Where("chat_id = ?", chatUser.ChatID).Unscoped().Delete(&Model.ChatUser{})
+	err = chat_actions.DissalowChatTransaction(chatUser.ChatID)
 
-		if result.Error != nil {
-			return errors.New("ошибка")
-		}
-
-		result := tx.Where("id=?", chatUser.ChatID).Unscoped().Delete(&Model.Chat{})
-		if result.Error != nil {
-			return errors.New("ошибка")
-		}
-
-		return nil
-	})
+	if err != nil {
+		return nil, status.Error(codes.Unknown, "Не удалось отказать в доступе")
+	}
 
 	return &chat.DissalowChatResponse{
 		Message: "Успех",
@@ -514,7 +441,7 @@ func (s *ChatServer) GetMessages(ctx context.Context, in *chat.GetMessagesReques
 		return nil, status.Error(codes.Unknown, "Не удалось получить сообщения")
 	}
 
-	var message []*chat.Message
+	var messages []*chat.Message
 
 	if err := helpers.CheckChat(ctx, in.GetChatId()); err != nil {
 		return nil, status.Error(codes.NotFound, "Чат не найден")
@@ -525,15 +452,15 @@ func (s *ChatServer) GetMessages(ctx context.Context, in *chat.GetMessagesReques
 		return nil, status.Error(codes.PermissionDenied, "Пользователь не найден")
 	}
 	var page = int64(in.GetPage())
-	var count int64 = 0
-	count, err = chat_actions.GetCountNotReadedMessages(int(in.GetChatId()), int(user.ID))
+	var countNotReaded int64 = 0
+	countNotReaded, err = chat_actions.GetCountNotReadedMessages(int(in.GetChatId()), int(user.ID))
 
 	if err != nil {
 		return nil, status.Error(codes.Unknown, "Не удалось получить сообщения")
 	}
 
 	if in.GetInit() {
-		page = count / 10
+		page = countNotReaded / 10
 		if page != 0 {
 			page += 1
 		}
@@ -547,25 +474,20 @@ func (s *ChatServer) GetMessages(ctx context.Context, in *chat.GetMessagesReques
 		Group("messages.id").
 		Order("id DESC").Offset(10 * int(page)).
 		Limit(10).
-		Find(&message)
+		Find(&messages)
 
 	if r.Error != nil {
 		return nil, status.Error(codes.Unknown, "Не удалось получить сообщения")
 	}
 
 	return &chat.GetMessagesResponse{
-		Messages:     message,
+		Messages:     messages,
 		Page:         int32(page),
-		CountNotRead: int32(count),
+		CountNotRead: int32(countNotReaded),
 	}, nil
 }
 
 func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFileServer) error {
-	awsBucket, ok := os.LookupEnv("AWS_BUCKET")
-
-	if !ok {
-		return status.Error(codes.Unknown, "Неизвестная ошибка")
-	}
 	ctx := requestStream.Context()
 	user, err := helpers.GetUserFormMd(ctx)
 
@@ -637,35 +559,16 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 				chat_actions.Rollback(messageId)
 				return status.Error(codes.OutOfRange, "Переполнение файлов")
 			}
-			err = db.DB.Transaction(func(tx *gorm.DB) error {
-				chatFile = &Model.ChatFile{
-					ChatRelations: Model.ChatRelations{
-						ChatID: chatUser.ChatID,
-					},
-					MessageRelations: Model.MessageRelations{
-						MessageID: messageId,
-					},
-					UserRelation: Model.UserRelation{
-						UserID: user.ID,
-					},
-					FileName: req.GetFileName(),
-				}
-				r := tx.Create(&chatFile)
-				if r.RowsAffected == 0 || r.Error != nil {
-					return errors.New("ошибка создания ChatFile")
-				}
-				return nil
-			})
+
+			chatFile, err = chat_actions.UploadChatFileTransaction(user.ID, chatUser.ChatID, messageId, req.GetFileName())
+
 			if err != nil {
 				fmt.Println("Error UploadChatFile: ", err)
 				chat_actions.Rollback(messageId)
 				return status.Error(codes.Unknown, "Неизвестная ошибка")
 			}
-			input := &s3.CreateMultipartUploadInput{
-				Bucket: aws.String(awsBucket),
-				Key:    aws.String("ChatFiles/" + strconv.Itoa(int(chatFile.ID))),
-			}
-			resp, err = db.SVC.CreateMultipartUpload(ctx, input)
+
+			resp, err = chat_actions.UploadChatFile(ctx, chatFile.ID)
 
 			if err != nil {
 				fmt.Println(err)
@@ -677,7 +580,7 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 		completedPart, err := chat_actions.UploadPart(ctx, resp, req.GetChunk(), partNumber)
 		if err != nil {
 			chat_actions.AbortMultipartUpload(ctx, resp)
-			fmt.Println(err)
+			fmt.Println("Error UploadChatFile:", err)
 			chat_actions.Rollback(messageId)
 			return status.Error(codes.Unknown, "Неизвестная ошибка")
 		}
@@ -691,7 +594,14 @@ func (s *ChatServer) UploadChatFile(requestStream chat.ChatGreeter_UploadChatFil
 		return status.Error(codes.Unknown, "Не удалось загрузить файл")
 	}
 
-	db.DB.Model(&Model.ChatFile{}).Where("id = ?", chatFile.ID).Update("size", size)
+	r := db.DB.Model(&Model.ChatFile{}).Where("id = ?", chatFile.ID).Update("size", size)
+
+	if r.Error != nil {
+		fmt.Println("Error UploadChatFile:", err)
+		chat_actions.Rollback(messageId)
+		return status.Error(codes.Unknown, "Не удалось загрузить файл")
+	}
+
 	return requestStream.SendAndClose(&chat.UploadFileChatResponse{Message: "Успешно загружено"})
 }
 
@@ -749,6 +659,13 @@ func (s *ChatServer) StreamGetMessagesGeneral(in *chat.Empty, responseStream cha
 }
 
 func (s *ChatServer) StreamGetMessages(stream chat.ChatGreeter_StreamGetMessagesServer) error {
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Panic error: ", r)
+		}
+	}()
+
 	ctx := stream.Context()
 	md, _ := metadata.FromIncomingContext(ctx)
 	user, err := helpers.GetUserFormMd(ctx)
@@ -834,6 +751,12 @@ func (s *ChatServer) DownloadChatFile(in *chat.DownloadFileChatRequest, response
 }
 
 func (s *ChatServer) CreateFileMessage(ctx context.Context, in *chat.CreateFileMessageRequest) (*chat.CreateFileMessageResponse, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Panic error: ", r)
+		}
+	}()
+
 	err := validate.Valid(
 		validate.ValidType{
 			"chatId": validate.ValidateStruct{

@@ -34,7 +34,6 @@ type AuthServer struct {
 var keysUser = make(map[string]KeyUser)
 
 func (s *AuthServer) Login(ctx context.Context, in *auth.LoginRequest) (*auth.LoginResponse, error) {
-
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Println("Error Login: ", r)
